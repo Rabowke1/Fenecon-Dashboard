@@ -49,28 +49,45 @@
 
   <section class="card">
     <div class="card-head">
-      <h2>Heute</h2>
+      <div>
+        <h2>Auswertung</h2>
+        <p class="card-sub" id="range-label">–</p>
+      </div>
+      <div class="controls">
+        <button type="button" id="range-prev" aria-label="Vorheriger Zeitraum">‹</button>
+        <button type="button" id="range-next" aria-label="Nächster Zeitraum">›</button>
+      </div>
     </div>
+    <div class="periods" role="group" aria-label="Zeitraum">
+      <button type="button" data-preset="today" class="active">Heute</button>
+      <button type="button" data-preset="yesterday">Gestern</button>
+      <button type="button" data-preset="week">7 Tage</button>
+      <button type="button" data-preset="month">Monat</button>
+      <button type="button" data-preset="year">Jahr</button>
+      <button type="button" data-preset="custom">Zeitraum …</button>
+    </div>
+    <form class="custom-range" id="custom-range" hidden>
+      <label>Von <input type="date" id="range-from" required></label>
+      <label>Bis <input type="date" id="range-to" required></label>
+      <button type="submit">Anzeigen</button>
+    </form>
+    <p class="notice" id="range-notice" hidden></p>
     <div class="stats">
       <div><span class="label">PV-Ertrag</span><span class="num" id="t-production">–</span></div>
       <div><span class="label">Verbrauch</span><span class="num" id="t-consumption">–</span></div>
       <div><span class="label">Netzbezug</span><span class="num" id="t-grid_buy">–</span></div>
       <div><span class="label">Einspeisung</span><span class="num" id="t-grid_sell">–</span></div>
+      <div><span class="label">Batterie geladen</span><span class="num" id="t-ess_charge">–</span></div>
+      <div><span class="label">Batterie entladen</span><span class="num" id="t-ess_discharge">–</span></div>
       <div><span class="label">Autarkie</span><span class="num" id="t-autarky">–</span></div>
       <div><span class="label">Eigenverbrauch</span><span class="num" id="t-self_consumption">–</span></div>
       <div><span class="label">Stromkosten</span><span class="num" id="t-cost">–</span></div>
     </div>
   </section>
 
-  <section class="card">
+  <section class="card" id="power-card">
     <div class="card-head">
       <h2>Leistungsverlauf</h2>
-      <div class="controls">
-        <button type="button" id="day-prev" aria-label="Vorheriger Tag">‹</button>
-        <input type="date" id="day-input">
-        <button type="button" id="day-next" aria-label="Nächster Tag">›</button>
-        <button type="button" id="day-today">Heute</button>
-      </div>
     </div>
     <div class="legend" id="power-legend"></div>
     <div class="chart tall"><canvas id="power-chart"></canvas></div>
@@ -79,17 +96,13 @@
     <p class="hint">Netz: + Bezug / − Einspeisung · Batterie: + Entladen / − Laden</p>
   </section>
 
-  <section class="card">
+  <section class="card" id="energy-card" hidden>
     <div class="card-head">
-      <h2>Energiebilanz</h2>
-      <div class="controls segmented" role="group" aria-label="Zeitraum">
-        <button type="button" data-group="day" class="active">Tage</button>
-        <button type="button" data-group="month">Monate</button>
-        <button type="button" data-group="year">Jahre</button>
-      </div>
+      <h2 id="energy-title">Energie je Tag</h2>
     </div>
     <div class="legend" id="energy-legend"></div>
     <div class="chart tall"><canvas id="energy-chart"></canvas></div>
+    <p class="hint" id="energy-hint"></p>
     <details>
       <summary>Tabelle anzeigen</summary>
       <div class="table-wrap"><table id="energy-table"></table></div>

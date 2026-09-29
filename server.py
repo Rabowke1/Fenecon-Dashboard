@@ -218,6 +218,11 @@ class Store:
         with self.lock, self.connect() as db:
             db.executemany(sql, [[r.get(n) for n in names] for r in rows])
 
+    def first_date(self):
+        with self.connect() as db:
+            row = db.execute("SELECT date(MIN(ts), 'unixepoch', 'localtime') FROM samples").fetchone()
+        return row[0] if row else None
+
     def is_empty(self):
         with self.connect() as db:
             return db.execute("SELECT COUNT(*) FROM samples").fetchone()[0] == 0
@@ -476,12 +481,19 @@ def make_handler(app):
                              "month": date(last.year, 1, 1),
                              "year": date(last.year - 9, 1, 1)}[group]
             first = parse_day(q.get("from"), default_first)
+            if first > last:
+                first, last = last, first
             days = app.store.daily_energy(first, last)
             rows = rollup(days, group)
             for row in rows:  # Kosten je Zeitraum aus den zugehörigen Tagen
                 row["cost"] = app.costs([d for d in days if d["date"].startswith(row["date"])])
+            total = {f: round(sum(d[f] for d in days), 1) for f in FLOWS}
+            total["samples"] = sum(d["samples"] for d in days)
+            total = add_ratios(total)
+            total["cost"] = app.costs(days)
             self.send_json({"group": group, "from": first.isoformat(), "to": last.isoformat(),
-                            "rows": rows, "cost": app.costs(days)})
+                            "first_date": app.store.first_date(), "days_with_data": len(days),
+                            "rows": rows, "total": total, "cost": total["cost"]})
 
         def api_channels(self, q):
             if app.demo:

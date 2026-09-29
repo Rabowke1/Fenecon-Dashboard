@@ -45,26 +45,15 @@ async function refreshLive() {
   $("soc-fill").style.width = `${Math.max(0, Math.min(100, v.soc || 0))}%`;
   $("soc-meter").setAttribute("aria-valuenow", v.soc ?? 0);
 
-  const t = data.today || {};
-  for (const k of ["production", "consumption", "grid_buy", "grid_sell"]) $(`t-${k}`).textContent = fmtEnergy(t[k]);
-  $("t-autarky").textContent = fmtPct(t.autarky);
-  $("t-self_consumption").textContent = fmtPct(t.self_consumption);
-  const costKey = JSON.stringify(t.cost || null);
-  // Nicht neu zeichnen, solange das Kosten-Panel offen ist.
-  if (costKey !== refreshLive.costKey && !$("t-cost").matches(":hover, :focus-within")) {
-    refreshLive.costKey = costKey;
-    $("t-cost").innerHTML = Cost.html(t.cost, "Stromkosten heute");
-  }
-
   const when = data.ts ? new Date(data.ts * 1000).toLocaleTimeString("de-DE") : "–";
   const demo = data.demo ? " · Demo-Modus" : "";
   if (data.ok) setStatus("ok", `Verbunden · ${when}${demo}`);
   else setStatus("error", `${data.error}${data.ts ? ` · letzte Daten ${when}` : ""}`);
 
-  // Beim Blick auf heute die Kurve jede Minute nachziehen.
-  if (data.ts && currentDay === isoDay(new Date()) && (!lastLiveTs || data.ts - lastLiveTs >= 60)) {
+  // Enthält der gewählte Zeitraum heute, die Auswertung jede Minute nachziehen.
+  if (data.ts && range.to >= isoDay(new Date()) && (!lastLiveTs || data.ts - lastLiveTs >= 60)) {
     lastLiveTs = data.ts;
-    loadHistory();
+    loadRange({ quiet: true });
   }
 }
 
@@ -73,7 +62,7 @@ function setStatus(kind, text) {
   $("status-text").textContent = text;
 }
 
-/* ---------- Diagramme ---------- */
+/* ---------- Diagramm-Grundlagen ---------- */
 
 const POWER_SERIES = [
   { key: "production", label: "Erzeugung", slot: 1 },
@@ -114,52 +103,181 @@ function baseOptions() {
 }
 
 let powerChart, socChart, energyChart;
-let currentDay = isoDay(new Date());
-let currentGroup = "day";
 let historyData = null, energyData = null;
 
-function timeTicks(chart) {
-  chart.options.scales.x.type = "linear";
-  chart.options.scales.x.ticks.callback = (v) => new Date(v).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-  chart.options.scales.x.ticks.stepSize = 3 * 3600 * 1000;
-  chart.options.plugins.tooltip.callbacks = {
-    title: (items) => new Date(items[0].parsed.x).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
-    ...(chart.options.plugins.tooltip.callbacks || {}),
-  };
+/* ---------- Zeitraum ---------- */
+
+const parseDay = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (iso, n) => { const d = parseDay(iso); d.setDate(d.getDate() + n); return isoDay(d); };
+const daysBetween = (a, b) => Math.round((parseDay(b) - parseDay(a)) / 86400000) + 1;
+const fmtDay = (iso, opts = { day: "2-digit", month: "2-digit", year: "numeric" }) => parseDay(iso).toLocaleDateString("de-DE", opts);
+
+let range = presetRange("today");
+
+function presetRange(preset, anchor = isoDay(new Date())) {
+  const a = parseDay(anchor);
+  switch (preset) {
+    case "yesterday": return { preset, from: addDays(anchor, -1), to: addDays(anchor, -1) };
+    case "week": return { preset, from: addDays(anchor, -6), to: anchor };
+    case "month": return { preset, from: isoDay(new Date(a.getFullYear(), a.getMonth(), 1)), to: isoDay(new Date(a.getFullYear(), a.getMonth() + 1, 0)) };
+    case "year": return { preset, from: `${a.getFullYear()}-01-01`, to: `${a.getFullYear()}-12-31` };
+    default: return { preset: "today", from: anchor, to: anchor };
+  }
 }
+
+// Zukunft abschneiden: "Monat" heißt 1. bis heute, solange der Monat läuft.
+function effective(r) {
+  const today = isoDay(new Date());
+  return { ...r, to: r.to > today ? today : r.to };
+}
+
+function shiftRange(dir) {
+  const r = range;
+  let next;
+  if (r.preset === "month") {
+    const a = parseDay(r.from);
+    next = presetRange("month", isoDay(new Date(a.getFullYear(), a.getMonth() + dir, 1)));
+  } else if (r.preset === "year") {
+    next = presetRange("year", `${parseDay(r.from).getFullYear() + dir}-01-01`);
+  } else {
+    const span = daysBetween(r.from, r.to);
+    next = { preset: r.preset === "week" ? "week" : r.from === r.to ? "day" : "custom",
+             from: addDays(r.from, dir * span), to: addDays(r.to, dir * span) };
+    if (next.preset === "day") {
+      const today = isoDay(new Date());
+      if (next.from === today) next.preset = "today";
+      else if (next.from === addDays(today, -1)) next.preset = "yesterday";
+    }
+  }
+  if (next.from > isoDay(new Date())) return;
+  range = next;
+  loadRange();
+}
+
+function rangeLabel(r) {
+  const e = effective(r);
+  if (r.preset === "today") return `Heute, ${fmtDay(e.from)}`;
+  if (r.preset === "yesterday") return `Gestern, ${fmtDay(e.from)}`;
+  if (e.from === e.to) return fmtDay(e.from, { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+  if (r.preset === "month") return parseDay(r.from).toLocaleDateString("de-DE", { month: "long", year: "numeric" }) + (e.to !== r.to ? ` (bis ${fmtDay(e.to)})` : "");
+  if (r.preset === "year") return `Jahr ${r.from.slice(0, 4)}` + (e.to !== r.to ? ` (bis ${fmtDay(e.to)})` : "");
+  return `${fmtDay(e.from)} – ${fmtDay(e.to)} · ${daysBetween(e.from, e.to)} Tage`;
+}
+
+function groupFor(e) {
+  const span = daysBetween(e.from, e.to);
+  return span <= 62 ? "day" : span <= 3 * 366 ? "month" : "year";
+}
+
+function syncControls() {
+  document.querySelectorAll(".periods button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.preset === range.preset || (b.dataset.preset === "custom" && ["custom", "day"].includes(range.preset))));
+  $("custom-range").hidden = !["custom", "day"].includes(range.preset);
+  const e = effective(range);
+  $("range-from").value = e.from;
+  $("range-to").value = e.to;
+  $("range-from").max = $("range-to").max = isoDay(new Date());
+  $("range-label").textContent = rangeLabel(range);
+  $("range-next").disabled = effective(range).to >= isoDay(new Date());
+}
+
+/* ---------- Laden ---------- */
+
+async function loadRange({ quiet = false } = {}) {
+  syncControls();
+  const e = effective(range);
+  const span = daysBetween(e.from, e.to);
+  const group = groupFor(e);
+  try {
+    const [energy, history] = await Promise.all([
+      getJSON(`/api/energy?group=${group}&from=${e.from}&to=${e.to}`),
+      span <= 7 ? getJSON(`/api/history?date=${e.from}&days=${span}`) : Promise.resolve(null),
+    ]);
+    energyData = energy;
+    historyData = history;
+  } catch (err) {
+    if (!quiet) $("range-notice").textContent = `Daten konnten nicht geladen werden: ${err.message}`;
+    $("range-notice").hidden = quiet;
+    return;
+  }
+  renderStats();
+  $("power-card").hidden = !historyData;
+  $("energy-card").hidden = span < 2;
+  renderHistory();
+  renderEnergy();
+}
+
+function renderStats() {
+  const t = energyData.total;
+  for (const k of ["production", "consumption", "grid_buy", "grid_sell", "ess_charge", "ess_discharge"]) $(`t-${k}`).textContent = fmtEnergy(t[k]);
+  $("t-autarky").textContent = fmtPct(t.autarky);
+  $("t-self_consumption").textContent = fmtPct(t.self_consumption);
+  const costKey = JSON.stringify(t.cost || null);
+  // Nicht neu zeichnen, solange das Kosten-Panel offen ist.
+  if (costKey !== renderStats.costKey && !$("t-cost").matches(":hover, :focus-within")) {
+    renderStats.costKey = costKey;
+    $("t-cost").innerHTML = Cost.html(t.cost, `Stromkosten · ${rangeLabel(range)}`);
+  }
+
+  // Hinweis, wenn für einen Teil des Zeitraums noch keine Aufzeichnung existiert.
+  const e = effective(range);
+  const notice = $("range-notice");
+  const first = energyData.first_date;
+  if (!first) {
+    notice.textContent = "Noch keine gespeicherten Werte. Die Aufzeichnung beginnt, sobald das FEMS erreichbar ist.";
+  } else if (first > e.to) {
+    notice.textContent = `Für diesen Zeitraum gibt es keine Daten. Die Aufzeichnung läuft seit ${fmtDay(first)}.`;
+  } else if (first > e.from) {
+    notice.textContent = `Werte erst ab ${fmtDay(first)} – seitdem läuft die Aufzeichnung.`;
+  } else if (energyData.days_with_data < daysBetween(e.from, e.to)) {
+    notice.textContent = `Für ${daysBetween(e.from, e.to) - energyData.days_with_data} Tag(e) im Zeitraum fehlen Aufzeichnungen.`;
+  } else {
+    notice.textContent = "";
+  }
+  notice.hidden = !notice.textContent;
+}
+
+/* ---------- Diagramme ---------- */
 
 function renderHistory() {
   if (!historyData) return;
   const pts = historyData.points;
-  const [y, m, d] = currentDay.split("-").map(Number);
-  const dayStart = new Date(y, m - 1, d).getTime();
-  const dayEnd = dayStart + 24 * 3600 * 1000;
+  const start = parseDay(historyData.date).getTime();
+  const end = start + historyData.days * 86400000;
+  const multi = historyData.days > 1;
+  const fmtX = (v) => multi
+    ? new Date(v).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })
+    : new Date(v).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const fmtTitle = (v) => new Date(v).toLocaleString("de-DE", multi
+    ? { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
+    : { hour: "2-digit", minute: "2-digit" });
+  const timeAxis = (opts) => {
+    Object.assign(opts.scales.x, { type: "linear", min: start, max: end });
+    opts.scales.x.ticks.callback = fmtX;
+    opts.scales.x.ticks.stepSize = multi ? 86400000 : 3 * 3600000;
+  };
+  const gap = Math.max(5 * 60000, historyData.bucket_seconds * 2000);
 
   const powerOpts = baseOptions();
-  powerOpts.scales.x.min = dayStart;
-  powerOpts.scales.x.max = dayEnd;
+  timeAxis(powerOpts);
   powerOpts.scales.y.ticks.callback = (v) => fmtPower(v);
-  powerOpts.plugins.tooltip.callbacks = { label: (c) => ` ${c.dataset.label}: ${fmtPower(c.parsed.y)}` };
+  powerOpts.plugins.tooltip.callbacks = { title: (i) => fmtTitle(i[0].parsed.x), label: (c) => ` ${c.dataset.label}: ${fmtPower(c.parsed.y)}` };
   const datasets = POWER_SERIES.map((s) => ({
     label: s.label,
     data: pts.map((p) => ({ x: p.ts * 1000, y: p[s.key] })),
     borderColor: css(`--series-${s.slot}`),
     backgroundColor: css(`--series-${s.slot}`),
-    borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: 5 * 60 * 1000,
+    borderWidth: multi ? 1.5 : 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: gap,
   }));
   if (powerChart) powerChart.destroy();
   powerChart = new Chart($("power-chart"), { type: "line", data: { datasets }, options: powerOpts });
-  timeTicks(powerChart);
-  powerChart.update();
 
   const socOpts = baseOptions();
-  socOpts.scales.x.min = dayStart;
-  socOpts.scales.x.max = dayEnd;
-  socOpts.scales.y.min = 0;
-  socOpts.scales.y.max = 100;
+  timeAxis(socOpts);
+  Object.assign(socOpts.scales.y, { min: 0, max: 100 });
   socOpts.scales.y.ticks.stepSize = 50;
   socOpts.scales.y.ticks.callback = (v) => `${v} %`;
-  socOpts.plugins.tooltip.callbacks = { label: (c) => ` Ladezustand: ${fmtPct(c.parsed.y)}` };
+  socOpts.plugins.tooltip.callbacks = { title: (i) => fmtTitle(i[0].parsed.x), label: (c) => ` Ladezustand: ${fmtPct(c.parsed.y)}` };
   const socColor = css("--series-3");
   if (socChart) socChart.destroy();
   socChart = new Chart($("soc-chart"), {
@@ -167,36 +285,24 @@ function renderHistory() {
     data: { datasets: [{
       label: "Ladezustand", data: pts.map((p) => ({ x: p.ts * 1000, y: p.soc })),
       borderColor: socColor, backgroundColor: socColor + "33", fill: "origin",
-      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: 5 * 60 * 1000,
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: gap,
     }] },
     options: socOpts,
   });
-  timeTicks(socChart);
-  socChart.update();
 }
 
-async function loadHistory() {
-  $("day-input").value = currentDay;
-  $("day-next").disabled = currentDay >= isoDay(new Date());
-  try {
-    historyData = await getJSON(`/api/history?date=${currentDay}`);
-    renderHistory();
-  } catch (e) { /* Status-Anzeige übernimmt refreshLive */ }
-}
-
-function labelFor(key) {
-  if (currentGroup === "year") return key;
-  if (currentGroup === "month") {
-    const [y, m] = key.split("-").map(Number);
-    return new Date(y, m - 1, 1).toLocaleDateString("de-DE", { month: "short", year: "2-digit" });
-  }
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+function labelFor(key, group) {
+  if (group === "year") return key;
+  if (group === "month") return parseDay(`${key}-01`).toLocaleDateString("de-DE", { month: "short", year: "2-digit" });
+  return fmtDay(key, { day: "2-digit", month: "2-digit" });
 }
 
 function renderEnergy() {
-  if (!energyData) return;
+  if (!energyData || $("energy-card").hidden) return;
   const rows = energyData.rows;
+  const group = energyData.group;
+  $("energy-title").textContent = { day: "Energie je Tag", month: "Energie je Monat", year: "Energie je Jahr" }[group];
+  $("energy-hint").textContent = group === "day" ? "Balken anklicken, um den Tag im Leistungsverlauf zu öffnen." : "Balken anklicken, um den Zeitraum zu öffnen.";
   const opts = baseOptions();
   opts.scales.y.ticks.callback = (v) => fmtEnergy(v);
   opts.plugins.tooltip.callbacks = {
@@ -209,6 +315,21 @@ function renderEnergy() {
   };
   opts.plugins.tooltip.footerColor = css("--text-2");
   opts.plugins.tooltip.footerFont = { weight: "normal" };
+  opts.onClick = (_e, els) => {
+    if (!els.length) return;
+    const key = rows[els[0].index].date;
+    if (group === "day") range = { preset: "day", from: key, to: key };
+    else if (group === "month") range = presetRange("month", `${key}-01`);
+    else range = presetRange("year", `${key}-01-01`);
+    if (range.preset === "day") {
+      const today = isoDay(new Date());
+      if (key === today) range.preset = "today";
+      else if (key === addDays(today, -1)) range.preset = "yesterday";
+    }
+    loadRange();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  opts.onHover = (e, els) => { e.native.target.style.cursor = els.length ? "pointer" : "default"; };
   const datasets = ENERGY_SERIES.map((s) => ({
     label: s.label,
     data: rows.map((r) => r[s.key]),
@@ -218,12 +339,12 @@ function renderEnergy() {
   }));
   if (energyChart) energyChart.destroy();
   energyChart = new Chart($("energy-chart"), {
-    type: "bar", data: { labels: rows.map((r) => labelFor(r.date)), datasets }, options: opts,
+    type: "bar", data: { labels: rows.map((r) => labelFor(r.date, group)), datasets }, options: opts,
   });
 
   const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Stromkosten", "Ohne PV"];
   const body = rows.slice().reverse().map((r) => [
-    labelFor(r.date), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
+    labelFor(r.date, group), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
     fmtEnergy(r.ess_charge), fmtEnergy(r.ess_discharge), fmtPct(r.autarky), fmtPct(r.self_consumption),
     Cost.money(r.cost?.total), Cost.money(r.cost?.without_pv.total),
   ]);
@@ -232,40 +353,29 @@ function renderEnergy() {
     `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 
-async function loadEnergy() {
-  try {
-    // Auf schmalen Bildschirmen nur 14 statt 30 Tage, damit die Balken lesbar bleiben.
-    let url = `/api/energy?group=${currentGroup}`;
-    if (currentGroup === "day" && window.innerWidth < 600) {
-      const from = new Date(); from.setDate(from.getDate() - 13);
-      url += `&from=${isoDay(from)}`;
-    }
-    energyData = await getJSON(url);
-    renderEnergy();
-  } catch (e) { /* s. o. */ }
-}
-
 /* ---------- Bedienung ---------- */
 
-function shiftDay(delta) {
-  const [y, m, d] = currentDay.split("-").map(Number);
-  const next = new Date(y, m - 1, d + delta);
-  if (isoDay(next) > isoDay(new Date())) return;
-  currentDay = isoDay(next);
-  loadHistory();
-}
-
-$("day-prev").addEventListener("click", () => shiftDay(-1));
-$("day-next").addEventListener("click", () => shiftDay(1));
-$("day-today").addEventListener("click", () => { currentDay = isoDay(new Date()); loadHistory(); });
-$("day-input").max = isoDay(new Date());
-$("day-input").addEventListener("change", (e) => { if (e.target.value) { currentDay = e.target.value; loadHistory(); } });
-
-document.querySelectorAll(".segmented button").forEach((btn) => btn.addEventListener("click", () => {
-  document.querySelectorAll(".segmented button").forEach((b) => b.classList.toggle("active", b === btn));
-  currentGroup = btn.dataset.group;
-  loadEnergy();
+document.querySelectorAll(".periods button").forEach((btn) => btn.addEventListener("click", () => {
+  if (btn.dataset.preset === "custom") {
+    const e = effective(range);
+    range = { preset: "custom", from: e.from, to: e.to };
+    syncControls();
+    $("range-from").focus();
+    return;
+  }
+  range = presetRange(btn.dataset.preset);
+  loadRange();
 }));
+$("custom-range").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  let from = $("range-from").value, to = $("range-to").value;
+  if (!from || !to) return;
+  if (from > to) [from, to] = [to, from];
+  range = { preset: from === to ? "day" : "custom", from, to };
+  loadRange();
+});
+$("range-prev").addEventListener("click", () => shiftRange(-1));
+$("range-next").addEventListener("click", () => shiftRange(1));
 
 // Farben bei Wechsel hell/dunkel neu einlesen.
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderHistory(); renderEnergy(); });
@@ -276,8 +386,6 @@ if (window.Chart) {
   Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
   Chart.defaults.font.size = 12;
 }
+loadRange();
 refreshLive();
-loadHistory();
-loadEnergy();
 setInterval(refreshLive, 5000);
-setInterval(loadEnergy, 10 * 60 * 1000);

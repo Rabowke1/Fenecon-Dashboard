@@ -5,9 +5,11 @@ Eine lokale Webseite für FENECON-PV-Anlagen: Ein kleiner Python-Server liest di
 zeigt sie im Browser an.
 
 - **Live-Werte** (alle 5 s): Erzeugung, Verbrauch, Batterie mit Ladezustand, Netzbezug/Einspeisung
-- **Heute**: PV-Ertrag, Verbrauch, Netzbezug, Einspeisung, Autarkie, Eigenverbrauch
-- **Leistungsverlauf** eines beliebigen Tages und Ladezustand der Batterie
-- **Energiebilanz** nach Tagen, Monaten oder Jahren, auch als Tabelle
+- **Auswertung beliebiger Zeiträume**: Heute, Gestern, 7 Tage, Monat, Jahr oder frei gewählt (Von/Bis),
+  mit ‹ › zum Blättern – jeweils Erzeugung, Verbrauch, Netzbezug, Einspeisung, Batterie, Autarkie,
+  Eigenverbrauch und Stromkosten
+- **Leistungsverlauf** mit Ladezustand der Batterie (für Zeiträume bis 7 Tage)
+- **Energie je Tag, Monat oder Jahr** als Balkendiagramm und Tabelle (für längere Zeiträume)
 - **Berichte aus den Excel-Exporten** des FEMS: Tageszusammenfassung auf einen Blick (siehe unten)
 
 Benötigt wird nur Python 3.8+ (keine Zusatzpakete). Chart.js liegt in `static/vendor/`,
@@ -96,8 +98,13 @@ Gelesen wird das Summen-Component `_sum` des FEMS:
 | Ladezustand | `EssSoc` | % |
 | Energiezähler | `ProductionActiveEnergy`, `ConsumptionActiveEnergy`, `GridBuyActiveEnergy`, `GridSellActiveEnergy`, `EssDcChargeEnergy`, `EssDcDischargeEnergy` | Wh |
 
-Pro Minute wird ein Datensatz mit Mittelwerten und den Zählerständen gespeichert
-(etwa 50 MB pro Jahr). Die Tagesenergie ergibt sich aus der Differenz der FEMS-Zähler;
+### Speicherung
+
+Alle Live-Werte landen in der SQLite-Datenbank `fems.sqlite` (Einstellung `database`): pro Minute ein
+Datensatz mit den Mittelwerten der Leistungen, dem Ladezustand und den Zählerständen des FEMS
+(etwa 50 MB pro Jahr). Es wird nichts automatisch gelöscht. Aus dieser Datenbank entstehen alle
+Auswertungen der Live-Seite. Zur Sicherung genügt es, die Datei zu kopieren, am besten während der
+Server kurz gestoppt ist. Die Tagesenergie ergibt sich aus der Differenz der FEMS-Zähler;
 fehlen diese, wird die Leistung aufintegriert.
 
 ### Stromkosten
@@ -146,7 +153,7 @@ WantedBy=multi-user.target
 |---|---|
 | `/api/live` | aktuelle Werte, Verbindungsstatus, Energie von heute |
 | `/api/history?date=2026-06-21` | Leistungsverlauf eines Tages (`&days=7` für mehrere Tage) |
-| `/api/energy?group=day\|month\|year&from=…&to=…` | Energiebilanz |
+| `/api/energy?group=day\|month\|year&from=…&to=…` | Energiebilanz je Tag/Monat/Jahr plus Summe (`total`) und Stromkosten für den Zeitraum |
 | `/api/channels?address=_sum/.*` | Rohwerte direkt aus dem FEMS (zum Erkunden weiterer Kanäle) |
 | `/api/exports` | alle eingelesenen Exporte mit Tageswerten und Summen |
 | `/api/exports/day?date=2026-09-28` | Tagesbericht mit Viertelstundenwerten |

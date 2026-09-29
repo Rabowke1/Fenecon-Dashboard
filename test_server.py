@@ -54,6 +54,11 @@ class EnergyTests(unittest.TestCase):
         self.assertEqual(month[0]["autarky"], 100.0)
         self.assertAlmostEqual(month[0]["self_consumption"], 33.3, delta=0.1)
 
+    def test_first_date(self):
+        self.assertIsNone(self.store.first_date())
+        self.store.insert(self.rows(date(2026, 6, 2)) + self.rows(date(2026, 6, 1)))
+        self.assertEqual(self.store.first_date(), "2026-06-01")
+
     def test_series_is_downsampled(self):
         d = date(2026, 6, 1)
         self.store.insert(self.rows(d))

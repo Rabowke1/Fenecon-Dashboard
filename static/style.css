@@ -282,3 +282,12 @@ td a { color: inherit; }
   :root:not([data-theme="light"]) .cost-row.saving, :root:not([data-theme="light"]) .cost-row.saving > span:last-child { color: #0ca30c; }
 }
 :root[data-theme="dark"] .cost-row.saving, :root[data-theme="dark"] .cost-row.saving > span:last-child { color: #0ca30c; }
+
+/* ---------- Zeitraumauswahl ---------- */
+.periods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.periods button { border-radius: 999px; padding: 5px 14px; }
+.periods button.active { background: var(--text); color: var(--surface); border-color: var(--text); }
+.custom-range { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-2); }
+.custom-range label { display: inline-flex; align-items: center; gap: 6px; }
+.notice { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--text-2); background: var(--page); border: 1px solid var(--border); }
+.stats .num { font-size: 20px; }
