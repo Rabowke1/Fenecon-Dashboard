@@ -120,7 +120,7 @@ die Aufschlüsselung, die Tabellen enthalten dieselben Werte je Zeile:
 | Posten | Rechnung |
 |---|---|
 | Gekaufter Strom | Netzbezug × Arbeitspreis (32,60 ct/kWh) |
-| Grundpreis anteilig | 11,90 €/Monat, tageweise auf den Monat verteilt |
+| Grundpreis anteilig | 11,90 €/Monat ÷ Tage des Monats, für **jeden Kalendertag** im Zeitraum bis heute – auch für Tage ohne Aufzeichnung |
 | − Einspeisevergütung | Einspeisung × Vergütung (6,66 ct/kWh) |
 | **Saldo** | gekaufter Strom + Grundpreis − Vergütung (negativ = Guthaben) |
 

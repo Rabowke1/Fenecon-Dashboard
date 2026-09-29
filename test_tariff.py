@@ -35,6 +35,14 @@ class TariffTests(unittest.TestCase):
         self.assertEqual(c["balance"], round(0.33 + c["base"] - 1.33, 2))
         self.assertEqual(tariff.costs(day, 11.90, 0.326)["feed_in"], 0)
 
+    def test_base_price_for_every_day_of_the_period(self):
+        # Juli: nur am 31. Messwerte, der Grundpreis fällt trotzdem für 31 Tage an.
+        july = [f"2026-07-{d:02d}" for d in range(1, 32)]
+        c = tariff.costs([{"date": "2026-07-31", "grid_buy": 1000, "consumption": 2000}], 11.90, 0.326,
+                         base_days=july)
+        self.assertEqual((c["days"], c["days_with_data"], c["base"]), (31, 1, 11.90))
+        self.assertEqual(c["bought"], 0.33)
+
     def test_display_adds_up(self):
         for n in range(0, 40000, 137):
             c = tariff.costs([{"date": "2026-02-10", "grid_buy": n / 3, "grid_sell": n / 7, "consumption": n}],
