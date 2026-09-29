@@ -8,6 +8,7 @@ zeigt sie im Browser an.
 - **Heute**: PV-Ertrag, Verbrauch, Netzbezug, Einspeisung, Autarkie, Eigenverbrauch
 - **Leistungsverlauf** eines beliebigen Tages und Ladezustand der Batterie
 - **Energiebilanz** nach Tagen, Monaten oder Jahren, auch als Tabelle
+- **Berichte aus den Excel-Exporten** des FEMS: Tageszusammenfassung auf einen Blick (siehe unten)
 
 Benötigt wird nur Python 3.8+ (keine Zusatzpakete). Chart.js liegt in `static/vendor/`,
 die Seite braucht also keine Internetverbindung.
@@ -51,8 +52,34 @@ Ohne FEMS (zum Anschauen): `python3 server.py --demo` erzeugt 60 Tage simulierte
 | `listen_host` | `127.0.0.1` = nur dieser Rechner, `0.0.0.0` = ganzes Heimnetz | `127.0.0.1` |
 | `listen_port` | Port der Webseite | `8080` |
 | `database` | SQLite-Datei | `fems.sqlite` |
+| `export_dir` | Ordner für die Excel-Exporte | `exports` |
+| `max_upload_mb` | maximale Größe beim Hochladen | `20` |
 
 Alle Werte lassen sich auch über Umgebungsvariablen setzen, z. B. `FEMS_FEMS_URL=http://192.168.0.23`.
+
+## Berichte aus dem FEMS-Datenexport
+
+Die Seite **Berichte** (<http://127.0.0.1:8080/berichte.html>) wertet die Excel-Dateien aus dem
+Datenexport des FEMS aus. Sie werden auf zwei Wegen eingelesen:
+
+- Datei auf die Seite ziehen oder über **Export hochladen** auswählen, oder
+- Datei direkt in den Ordner `exports/` auf dem Server kopieren (z. B. per Netzlaufwerk).
+
+Hochladen kann jeder, der die Seite erreicht. Mit `listen_host: "0.0.0.0"` ist das das ganze Heimnetz,
+die Seite sollte daher nicht aus dem Internet erreichbar sein.
+
+Pro Tag zeigt die Seite:
+
+- erzeugte Energie, Autarkie und Eigenverbrauch als Überblick, dazu ein kurzer Satz zum Tag
+- Erzeugung, Verbrauch, Batterie (geladen/entladen) und Netz (Bezug/Einspeisung) mit Tagesspitzen
+- **Woher kam der Strom?** (Solar direkt, Batterie, Netz) und **Wohin ging der Solarstrom?**
+  (direkt verbraucht, Batterie, eingespeist)
+- den Verlauf in Viertelstunden und den Ladezustand der Batterie
+- die einzelnen PV-Strings und Verbraucher aus der Detailauswertung des Exports
+
+Liegen mehrere Exporte vor, fasst **Alle Exporte** den gesamten Zeitraum zusammen: Summen,
+Autarkie, bester Tag und ein Balkendiagramm aller Tage. Exporte über mehrere Tage werden
+automatisch in einzelne Tage aufgeteilt. Gibt es einen Tag doppelt, gilt der neueste Export.
 
 ## Wie gerechnet wird
 
@@ -105,9 +132,12 @@ WantedBy=multi-user.target
 | `/api/history?date=2026-06-21` | Leistungsverlauf eines Tages (`&days=7` für mehrere Tage) |
 | `/api/energy?group=day\|month\|year&from=…&to=…` | Energiebilanz |
 | `/api/channels?address=_sum/.*` | Rohwerte direkt aus dem FEMS (zum Erkunden weiterer Kanäle) |
+| `/api/exports` | alle eingelesenen Exporte mit Tageswerten und Summen |
+| `/api/exports/day?date=2026-09-28` | Tagesbericht mit Viertelstundenwerten |
+| `POST /api/exports` | Export hochladen (Dateiinhalt als Body, Name im Header `X-Filename`) |
 
 ## Tests
 
 ```bash
-python3 -m unittest test_server
+python3 -m unittest test_server test_exports
 ```

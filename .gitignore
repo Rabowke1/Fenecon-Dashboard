@@ -1,3 +1,5 @@
 config.json
 *.sqlite
 __pycache__/
+exports/*
+!exports/.gitkeep

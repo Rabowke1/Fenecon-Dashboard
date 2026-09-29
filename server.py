@@ -26,6 +26,8 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
+from exports import ExportLibrary
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
 
@@ -40,6 +42,8 @@ DEFAULTS = {
     "database": "fems.sqlite",
     "timeout_seconds": 8,
     "demo": False,
+    "export_dir": "exports",
+    "max_upload_mb": 20,
 }
 
 # Leistungswerte (W) aus dem Summen-Component "_sum" des FEMS.
@@ -409,13 +413,36 @@ def make_handler(app):
             url = urllib.parse.urlparse(self.path)
             q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
             routes = {"/api/live": self.api_live, "/api/history": self.api_history,
-                      "/api/energy": self.api_energy, "/api/channels": self.api_channels}
+                      "/api/energy": self.api_energy, "/api/channels": self.api_channels,
+                      "/api/exports": self.api_exports, "/api/exports/day": self.api_export_day}
             if url.path in routes:
                 try:
                     return routes[url.path](q)
                 except Exception as exc:
                     return self.send_json({"error": describe_error(exc)}, 500)
             return super().do_GET()
+
+        def do_POST(self):
+            if urllib.parse.urlparse(self.path).path != "/api/exports":
+                return self.send_json({"error": "Nicht gefunden"}, 404)
+            length = int(self.headers.get("Content-Length") or 0)
+            if length <= 0 or length > app.cfg["max_upload_mb"] * 1024 * 1024:
+                return self.send_json({"error": f"Datei leer oder größer als {app.cfg['max_upload_mb']} MB"}, 413)
+            data = self.rfile.read(length)
+            name = urllib.parse.unquote(self.headers.get("X-Filename") or "export.xlsx")
+            try:
+                self.send_json(app.exports.save_upload(name, data))
+            except Exception as exc:
+                self.send_json({"error": f"Datei nicht lesbar: {exc}"}, 400)
+
+        def api_exports(self, q):
+            self.send_json(app.exports.overview())
+
+        def api_export_day(self, q):
+            day = app.exports.day(q.get("date", ""))
+            if day is None:
+                return self.send_json({"error": "Für diesen Tag gibt es keinen Export"}, 404)
+            self.send_json(day)
 
         def api_live(self, q):
             today = date.today()
@@ -467,6 +494,8 @@ class App:
         else:
             self.client = FemsClient(cfg["fems_url"], cfg["username"], cfg["password"], cfg["timeout_seconds"])
         self.poller = Poller(self.client, self.store, cfg["poll_seconds"], cfg["store_seconds"])
+        folder = cfg["export_dir"]
+        self.exports = ExportLibrary(folder if os.path.isabs(folder) else os.path.join(HERE, folder))
 
 
 def check(cfg):
