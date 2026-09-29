@@ -212,12 +212,7 @@ function renderStats() {
   for (const k of ["production", "consumption", "grid_buy", "grid_sell", "ess_charge", "ess_discharge"]) $(`t-${k}`).textContent = fmtEnergy(t[k]);
   $("t-autarky").textContent = fmtPct(t.autarky);
   $("t-self_consumption").textContent = fmtPct(t.self_consumption);
-  const costKey = JSON.stringify(t.cost || null);
-  // Nicht neu zeichnen, solange das Kosten-Panel offen ist.
-  if (costKey !== renderStats.costKey && !$("t-cost").matches(":hover, :focus-within")) {
-    renderStats.costKey = costKey;
-    $("t-cost").innerHTML = Cost.html(t.cost, rangeLabel(range));
-  }
+  $("t-money").innerHTML = Cost.card(t.cost);
 
   // Hinweis, wenn für einen Teil des Zeitraums noch keine Aufzeichnung existiert.
   const e = effective(range);
@@ -342,11 +337,11 @@ function renderEnergy() {
     type: "bar", data: { labels: rows.map((r) => labelFor(r.date, group)), datasets }, options: opts,
   });
 
-  const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Gekaufter Strom", "Durch PV gespart"];
+  const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Gekaufter Strom", "Einspeisevergütung", "Durch PV gespart", "Saldo"];
   const body = rows.slice().reverse().map((r) => [
     labelFor(r.date, group), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
     fmtEnergy(r.ess_charge), fmtEnergy(r.ess_discharge), fmtPct(r.autarky), fmtPct(r.self_consumption),
-    Cost.money(r.cost?.bought), Cost.money(r.cost?.saved),
+    Cost.money(r.cost?.bought), Cost.money(r.cost?.feed_in), Cost.money(r.cost?.saved), Cost.money(r.cost?.balance),
   ]);
   $("energy-table").innerHTML =
     `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead>` +

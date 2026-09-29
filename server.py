@@ -61,6 +61,7 @@ DEFAULTS = {
     "max_upload_mb": 20,
     "base_price_month": 11.90,
     "price_per_kwh": 0.326,
+    "feed_in_per_kwh": 0.0666,
 }
 
 # Leistungswerte (W) aus dem Summen-Component "_sum" des FEMS.
@@ -568,7 +569,8 @@ class App:
         self.exports = ExportLibrary(data_path(folder))
 
     def costs(self, days):
-        return costs(days, float(self.cfg["base_price_month"]), float(self.cfg["price_per_kwh"]))
+        return costs(days, float(self.cfg["base_price_month"]), float(self.cfg["price_per_kwh"]),
+                     float(self.cfg["feed_in_per_kwh"]))
 
 
 def check(cfg):

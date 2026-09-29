@@ -6,6 +6,10 @@ Verglichen wird nur der Strom selbst, zum Arbeitspreis je kWh:
     ohne PV              = Verbrauch × Arbeitspreis                 (= gekauft + selbst erzeugt)
 Der Grundpreis fällt mit und ohne PV gleich an und wird nur getrennt ausgewiesen,
 tageweise auf den jeweiligen Monat verteilt (ein ganzer Monat = Monatsgrundpreis).
+Dazu kommt die Einspeisevergütung für den ins Netz gelieferten Strom:
+    Einspeisevergütung   = Einspeisung × Vergütungssatz
+    Saldo                = gekaufter Strom + Grundpreis − Einspeisevergütung
+    Nutzen der PV        = selbst erzeugter Strom (gespart) + Einspeisevergütung
 """
 
 import calendar
@@ -24,28 +28,35 @@ def cents(value):
     return Decimal(repr(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def costs(days, base_price_month, price_per_kwh):
-    """days: Einträge mit 'date', 'grid_buy' und 'consumption' (Wh). Beträge in Euro.
+def costs(days, base_price_month, price_per_kwh, feed_in_per_kwh=0.0):
+    """days: Einträge mit 'date', 'grid_buy', 'grid_sell' und 'consumption' (Wh). Beträge in Euro.
 
     Einzelposten werden auf Cent gerundet und die Summen daraus gebildet,
     damit die Anzeige immer aufgeht.
     """
     grid_kwh = sum(d.get("grid_buy") or 0 for d in days) / 1000
+    sell_kwh = sum(d.get("grid_sell") or 0 for d in days) / 1000
     cons_kwh = max(grid_kwh, sum(d.get("consumption") or 0 for d in days) / 1000)
     self_kwh = cons_kwh - grid_kwh
     bought = cents(grid_kwh * price_per_kwh)
     saved = cents(self_kwh * price_per_kwh)
+    feed_in = cents(sell_kwh * feed_in_per_kwh)
     base = cents(sum(base_share(d["date"], base_price_month) for d in days))
     return {
         "days": len(days),
         "grid_kwh": round(grid_kwh, 2),
+        "sell_kwh": round(sell_kwh, 2),
         "self_kwh": round(self_kwh, 2),
         "consumption_kwh": round(cons_kwh, 2),
         "self_share": round(self_kwh / cons_kwh * 100, 1) if cons_kwh > 0 else None,
-        "bought": float(bought),             # gekaufter Strom
-        "saved": float(saved),               # selbst erzeugter Strom = Ersparnis
-        "without_pv": float(bought + saved),  # gesamter Verbrauch zum Arbeitspreis
-        "base": float(base),                 # Grundpreis anteilig, fällt immer an
-        "total": float(bought + base),       # tatsächlich bezahlt
-        "tariff": {"base_price_month": base_price_month, "price_per_kwh": price_per_kwh},
+        "bought": float(bought),               # gekaufter Strom
+        "saved": float(saved),                 # selbst erzeugter Strom = Ersparnis
+        "feed_in": float(feed_in),             # Einspeisevergütung
+        "without_pv": float(bought + saved),    # gesamter Verbrauch zum Arbeitspreis
+        "base": float(base),                   # Grundpreis anteilig, fällt immer an
+        "total": float(bought + base),         # an den Versorger bezahlt
+        "balance": float(bought + base - feed_in),  # Saldo nach Vergütung (negativ = Guthaben)
+        "benefit": float(saved + feed_in),     # Nutzen der PV insgesamt
+        "tariff": {"base_price_month": base_price_month, "price_per_kwh": price_per_kwh,
+                   "feed_in_per_kwh": feed_in_per_kwh},
     }

@@ -15,6 +15,7 @@ services:
       FEMS_PASSWORD: user
       FEMS_BASE_PRICE_MONTH: "11.90"          # Grundpreis €/Monat
       FEMS_PRICE_PER_KWH: "0.326"             # Arbeitspreis €/kWh
+      FEMS_FEED_IN_PER_KWH: "0.0666"          # Einspeisevergütung €/kWh
     volumes:
       - fenecon-data:/data                    # Datenbank, Exporte, optional config.json
 
