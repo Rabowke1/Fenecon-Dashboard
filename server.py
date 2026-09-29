@@ -12,6 +12,7 @@ Daten grafisch darstellt. Nur die Python-Standardbibliothek wird benötigt.
 
 import argparse
 import base64
+import contextlib
 import json
 import math
 import os
@@ -224,8 +225,16 @@ class Store:
             cols = ", ".join(f"{c} REAL" for c in COLUMNS)
             db.execute(f"CREATE TABLE IF NOT EXISTS samples (ts INTEGER PRIMARY KEY, dt REAL, {cols})")
 
+    @contextlib.contextmanager
     def connect(self):
-        return sqlite3.connect(self.path)
+        """Verbindung für einen Block: bestätigt am Ende und schließt sie wieder
+        (sqlite3 schließt im with-Block nicht selbst – unter Windows bliebe die Datei gesperrt)."""
+        db = sqlite3.connect(self.path)
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def insert(self, rows):
         names = ["ts", "dt"] + COLUMNS
