@@ -30,10 +30,12 @@ const Cost = (() => {
         <div class="money-col">
           <h3>Stromrechnung</h3>
           ${row("Gekaufter Strom", `${kwh.format(cost.grid_kwh)} kWh × ${cents(t.price_per_kwh)}`, money(cost.bought))}
-          ${row("Grundpreis anteilig", `${ct.format(t.base_price_month)} €/Monat · ${days}`, money(cost.base))}
+          ${row("Grundpreis anteilig", `${ct.format(t.base_price_month)} €/Monat · ${days} (fällt jeden Tag an)`, money(cost.base))}
           ${row("Einspeisevergütung", `${kwh.format(cost.sell_kwh)} kWh × ${cents(t.feed_in_per_kwh)}`, `− ${money(cost.feed_in)}`, "credit")}
           ${row(credit ? "Guthaben" : "Saldo", credit ? "Vergütung höher als die Kosten" : "Kosten abzüglich Vergütung",
                 money(Math.abs(cost.balance)), `total${credit ? " credit" : ""}`)}
+          ${cost.days_with_data < cost.days ? `<p class="money-note">Strommengen nur aus ${cost.days_with_data} von ${cost.days} Tagen
+            mit Aufzeichnung – der Grundpreis zählt für alle ${cost.days} Tage.</p>` : ""}
         </div>
         <div class="money-col">
           <h3>Das bringt die PV</h3>

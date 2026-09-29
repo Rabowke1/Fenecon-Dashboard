@@ -28,8 +28,11 @@ def cents(value):
     return Decimal(repr(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def costs(days, base_price_month, price_per_kwh, feed_in_per_kwh=0.0):
+def costs(days, base_price_month, price_per_kwh, feed_in_per_kwh=0.0, base_days=None):
     """days: Einträge mit 'date', 'grid_buy', 'grid_sell' und 'consumption' (Wh). Beträge in Euro.
+
+    base_days: alle Kalendertage des Zeitraums, für die der Grundpreis anfällt –
+    auch Tage ohne Messwerte. Ohne Angabe die Tage aus days.
 
     Einzelposten werden auf Cent gerundet und die Summen daraus gebildet,
     damit die Anzeige immer aufgeht.
@@ -41,9 +44,12 @@ def costs(days, base_price_month, price_per_kwh, feed_in_per_kwh=0.0):
     bought = cents(grid_kwh * price_per_kwh)
     saved = cents(self_kwh * price_per_kwh)
     feed_in = cents(sell_kwh * feed_in_per_kwh)
-    base = cents(sum(base_share(d["date"], base_price_month) for d in days))
+    if base_days is None:
+        base_days = [d["date"] for d in days]
+    base = cents(sum(base_share(d, base_price_month) for d in base_days))
     return {
-        "days": len(days),
+        "days": len(base_days),
+        "days_with_data": len(days),
         "grid_kwh": round(grid_kwh, 2),
         "sell_kwh": round(sell_kwh, 2),
         "self_kwh": round(self_kwh, 2),

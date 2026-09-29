@@ -528,13 +528,17 @@ def make_handler(app):
             if first > last:
                 first, last = last, first
             days = app.store.daily_energy(first, last)
+            # Der Grundpreis fällt an jedem Kalendertag bis heute an, auch ohne Messwerte.
+            calendar_days = [(first + timedelta(n)).isoformat()
+                             for n in range((min(last, date.today()) - first).days + 1)]
             rows = rollup(days, group)
             for row in rows:  # Kosten je Zeitraum aus den zugehörigen Tagen
-                row["cost"] = app.costs([d for d in days if d["date"].startswith(row["date"])])
+                row["cost"] = app.costs([d for d in days if d["date"].startswith(row["date"])],
+                                        [d for d in calendar_days if d.startswith(row["date"])])
             total = {f: round(sum(d[f] for d in days), 1) for f in FLOWS}
             total["samples"] = sum(d["samples"] for d in days)
             total = add_ratios(total)
-            total["cost"] = app.costs(days)
+            total["cost"] = app.costs(days, calendar_days)
             self.send_json({"group": group, "from": first.isoformat(), "to": last.isoformat(),
                             "first_date": app.store.first_date(), "days_with_data": len(days),
                             "rows": rows, "total": total, "cost": total["cost"]})
@@ -568,9 +572,9 @@ class App:
         folder = cfg["export_dir"]
         self.exports = ExportLibrary(data_path(folder))
 
-    def costs(self, days):
+    def costs(self, days, base_days=None):
         return costs(days, float(self.cfg["base_price_month"]), float(self.cfg["price_per_kwh"]),
-                     float(self.cfg["feed_in_per_kwh"]))
+                     float(self.cfg["feed_in_per_kwh"]), base_days)
 
 
 def check(cfg):
