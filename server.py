@@ -266,24 +266,43 @@ class Store:
                 "points": [dict(zip(keys, [r[0]] + [None if v is None else round(v, 1) for v in r[1:]]))
                            for r in rows]}
 
+    # Zählerdifferenzen über größere Lücken (Server aus) werden nur bis zu dieser
+    # Dauer dem folgenden Messwert zugerechnet; längere Lücken bleiben leer.
+    MAX_GAP_SECONDS = 6 * 3600
+
     def daily_energy(self, first, last):
-        """Energie (Wh) je Kalendertag. Zählerdifferenz, sonst integrierte Leistung."""
+        """Energie (Wh) je Kalendertag.
+
+        Summiert die Zuwächse der FEMS-Zähler zwischen aufeinanderfolgenden
+        Messwerten. Rücksprünge (Zähler zurückgesetzt, z. B. nach einem Update
+        oder Gerätetausch) werden übersprungen statt als Energie gezählt.
+        Fehlen die Zähler, wird die aufintegrierte Leistung verwendet.
+        """
+        start, _ = day_bounds(first)
+        _, end = day_bounds(last)
+        lags = ", ".join(f"LAG({c}) OVER w AS p_{c}" for c in FLOWS.values())
         parts = []
-        for flow, counter in FLOWS.items():
-            parts.append(f"MIN({counter}), MAX({counter}), COUNT({counter}), SUM(i_{flow})")
+        for flow, c in FLOWS.items():
+            parts.append(
+                f"SUM(CASE WHEN {c} >= p_{c} AND ts - p_ts <= {self.MAX_GAP_SECONDS} THEN {c} - p_{c} ELSE 0 END), "
+                f"COUNT({c}), SUM(i_{flow})")
         with self.connect() as db:
             rows = db.execute(
-                f"""SELECT date(ts, 'unixepoch', 'localtime') AS d, COUNT(*), {', '.join(parts)}
-                    FROM samples WHERE d >= ? AND d <= ? GROUP BY d ORDER BY d""",
-                (first.isoformat(), last.isoformat()),
+                f"""WITH s AS (
+                        SELECT *, LAG(ts) OVER w AS p_ts, {lags}
+                        FROM samples WHERE ts >= ? AND ts < ?
+                        WINDOW w AS (ORDER BY ts))
+                    SELECT date(ts, 'unixepoch', 'localtime') AS d, COUNT(*), {', '.join(parts)}
+                    FROM s WHERE ts >= ? GROUP BY d ORDER BY d""",
+                (start - self.MAX_GAP_SECONDS, end, start),
             ).fetchall()
         result = []
         for row in rows:
             day = {"date": row[0], "samples": row[1]}
             for i, flow in enumerate(FLOWS):
-                lo, hi, n, integ = row[2 + 4 * i: 6 + 4 * i]
-                if n and n >= row[1] * 0.9 and hi is not None and hi >= lo:
-                    day[flow] = round(hi - lo, 1)
+                counted, n, integ = row[2 + 3 * i: 5 + 3 * i]
+                if n and n >= row[1] * 0.9:
+                    day[flow] = round(counted or 0.0, 1)
                 else:
                     day[flow] = round(integ or 0.0, 1)
             result.append(day)

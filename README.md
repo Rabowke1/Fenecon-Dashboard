@@ -111,17 +111,25 @@ fehlen diese, wird die Leistung aufintegriert.
 
 ### Stromkosten
 
-Für jeden angezeigten Zeitraum (heute, ein Berichtstag, alle Exporte, jede Zeile der Energiebilanz)
-werden die Stromkosten berechnet:
+Für jeden angezeigten Zeitraum (Auswertung, Berichtstag, alle Exporte, jede Tabellenzeile) wird der
+Strom zum Arbeitspreis bewertet:
 
-- **Mit PV bezahlt** = Grundpreis anteilig + Netzbezug × Arbeitspreis
-- **Ohne PV** (fiktiv) = Grundpreis anteilig + gesamter Verbrauch × Arbeitspreis
-- **Ersparnis** = Ohne PV − Mit PV
+- **Gekaufter Strom** = Netzbezug × Arbeitspreis – das ist der angezeigte Betrag
+- **Selbst erzeugter Strom** = (Verbrauch − Netzbezug) × Arbeitspreis = **Ersparnis durch PV**
+- **Ohne PV** = gesamter Verbrauch × Arbeitspreis (= gekaufter + selbst erzeugter Strom)
 
-Der Grundpreis wird tageweise auf den Monat verteilt: Ein Tag im September kostet 11,90 € / 30,
-ein ganzer Monat genau 11,90 €. Fährt man mit der Maus über den Betrag (oder tippt ihn auf dem
-Handy an), erscheint die Aufschlüsselung samt Kosten ohne PV. Eine Einspeisevergütung ist nicht
-eingerechnet.
+Der **Grundpreis** fällt mit und ohne PV gleich an und hat mit der Ersparnis nichts zu tun. Er wird
+im Mouse-over getrennt ausgewiesen (tageweise auf den Monat verteilt: ein Tag im September =
+11,90 € / 30, ein ganzer Monat = 11,90 €), zusammen mit „Bezahlt insgesamt“ = gekaufter Strom +
+Grundpreis. Alle Posten werden auf Cent gerundet und die Summen daraus gebildet, sodass die Anzeige
+immer aufgeht. Eine Einspeisevergütung ist nicht eingerechnet.
+
+### Tagesenergie aus den Zählern
+
+Die Tageswerte entstehen aus den Zuwächsen der FEMS-Energiezähler zwischen zwei Messwerten.
+Springt ein Zähler zurück (z. B. nach einem Update des FEMS), wird dieser Sprung übersprungen.
+War der Server bis zu 6 Stunden aus, wird die Energie dieser Zeit dem ersten Messwert danach
+zugerechnet; längere Lücken bleiben leer.
 
 - **Autarkie** = 1 − Netzbezug / Verbrauch
 - **Eigenverbrauch** = 1 − Einspeisung / Erzeugung
