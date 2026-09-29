@@ -58,6 +58,7 @@ Ohne FEMS (zum Anschauen): `python3 server.py --demo` erzeugt 60 Tage simulierte
 | `max_upload_mb` | maximale Größe beim Hochladen | `20` |
 | `base_price_month` | Grundpreis des Stromtarifs in €/Monat | `11.90` |
 | `price_per_kwh` | Arbeitspreis in €/kWh | `0.326` |
+| `feed_in_per_kwh` | Einspeisevergütung in €/kWh | `0.0666` |
 
 Alle Werte lassen sich auch über Umgebungsvariablen setzen, z. B. `FEMS_FEMS_URL=http://192.168.0.23`.
 Der Ordner für `config.json`, Datenbank und Exporte ist standardmäßig der Programmordner;
@@ -109,20 +110,33 @@ Auswertungen der Live-Seite. Zur Sicherung genügt es, die Datei zu kopieren, am
 Server kurz gestoppt ist. Die Tagesenergie ergibt sich aus der Differenz der FEMS-Zähler;
 fehlen diese, wird die Leistung aufintegriert.
 
-### Stromkosten
+### Kosten und Vergütung
 
-Für jeden angezeigten Zeitraum (Auswertung, Berichtstag, alle Exporte, jede Tabellenzeile) wird der
-Strom zum Arbeitspreis bewertet:
+Für jeden gewählten Zeitraum (Auswertung, Berichtstag, alle Exporte) zeigt ein fest sichtbarer Block
+die Aufschlüsselung, die Tabellen enthalten dieselben Werte je Zeile:
 
-- **Gekaufter Strom** = Netzbezug × Arbeitspreis – das ist der angezeigte Betrag
-- **Selbst erzeugter Strom** = (Verbrauch − Netzbezug) × Arbeitspreis = **Ersparnis durch PV**
-- **Ohne PV** = gesamter Verbrauch × Arbeitspreis (= gekaufter + selbst erzeugter Strom)
+**Stromrechnung**
 
-Der **Grundpreis** fällt mit und ohne PV gleich an und hat mit der Ersparnis nichts zu tun. Er wird
-im Mouse-over getrennt ausgewiesen (tageweise auf den Monat verteilt: ein Tag im September =
-11,90 € / 30, ein ganzer Monat = 11,90 €), zusammen mit „Bezahlt insgesamt“ = gekaufter Strom +
-Grundpreis. Alle Posten werden auf Cent gerundet und die Summen daraus gebildet, sodass die Anzeige
-immer aufgeht. Eine Einspeisevergütung ist nicht eingerechnet.
+| Posten | Rechnung |
+|---|---|
+| Gekaufter Strom | Netzbezug × Arbeitspreis (32,60 ct/kWh) |
+| Grundpreis anteilig | 11,90 €/Monat, tageweise auf den Monat verteilt |
+| − Einspeisevergütung | Einspeisung × Vergütung (6,66 ct/kWh) |
+| **Saldo** | gekaufter Strom + Grundpreis − Vergütung (negativ = Guthaben) |
+
+**Das bringt die PV**
+
+| Posten | Rechnung |
+|---|---|
+| Selbst erzeugter Strom | (Verbrauch − Netzbezug) × Arbeitspreis – nicht gekaufter Strom |
+| Einspeisevergütung | Einspeisung × Vergütung |
+| **Nutzen gesamt** | Ersparnis + Vergütung |
+
+Dazu der Anteil gekauft/selbst erzeugt und zum Vergleich, was der gesamte Verbrauch ohne PV zum
+Arbeitspreis gekostet hätte. Der Grundpreis fällt mit und ohne PV an und steckt deshalb nicht in
+der Ersparnis. Alle Posten werden auf Cent gerundet und die Summen daraus gebildet, sodass die
+Anzeige immer aufgeht. Tarif und Vergütung stehen in `config.json` (`base_price_month`,
+`price_per_kwh`, `feed_in_per_kwh`).
 
 ### Tagesenergie aus den Zählern
 

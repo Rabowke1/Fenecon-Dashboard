@@ -27,11 +27,22 @@ class TariffTests(unittest.TestCase):
         self.assertEqual((c["base"], c["total"]), (0.40, 0.40))
         self.assertEqual(c["self_share"], 100.0)
 
+    def test_feed_in(self):
+        day = [{"date": "2026-09-28", "grid_buy": 1000, "grid_sell": 20000, "consumption": 37000}]
+        c = tariff.costs(day, 11.90, 0.326, 0.0666)
+        self.assertEqual(c["feed_in"], 1.33)            # 20 kWh × 6,66 ct
+        self.assertEqual(c["benefit"], round(c["saved"] + 1.33, 2))
+        self.assertEqual(c["balance"], round(0.33 + c["base"] - 1.33, 2))
+        self.assertEqual(tariff.costs(day, 11.90, 0.326)["feed_in"], 0)
+
     def test_display_adds_up(self):
         for n in range(0, 40000, 137):
-            c = tariff.costs([{"date": "2026-02-10", "grid_buy": n / 3, "consumption": n}], 11.90, 0.326)
+            c = tariff.costs([{"date": "2026-02-10", "grid_buy": n / 3, "grid_sell": n / 7, "consumption": n}],
+                             11.90, 0.326, 0.0666)
             self.assertAlmostEqual(c["bought"] + c["saved"], c["without_pv"], places=9)
             self.assertAlmostEqual(c["bought"] + c["base"], c["total"], places=9)
+            self.assertAlmostEqual(c["total"] - c["feed_in"], c["balance"], places=9)
+            self.assertAlmostEqual(c["saved"] + c["feed_in"], c["benefit"], places=9)
 
     def test_empty_period(self):
         c = tariff.costs([], 11.90, 0.326)

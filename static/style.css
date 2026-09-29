@@ -247,47 +247,33 @@ td a { color: inherit; }
   .kpi strong { font-size: 22px; }
 }
 
-/* ---------- Stromkosten mit Mouse-over ---------- */
+/* ---------- Kosten und Vergütung ---------- */
 .stats { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
-.cost { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: help; outline: none; }
-.cost-info { width: 16px; height: 16px; fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linecap: round; flex: none; }
-.cost:hover .cost-info, .cost:focus .cost-info { stroke: var(--text); }
-.cost:focus-visible .cost-value { text-decoration: underline dotted; }
-.kpi-cost {
-  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--grid);
-  font-size: 18px; font-weight: 650;
+.money-head { margin: 20px 0 8px; font-size: 15px; color: var(--text); }
+.money { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 32px; }
+.money-col h3 { margin: 4px 0 6px; font-size: 13px; color: var(--text-2); }
+.ledger-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 7px 0; border-top: 1px solid var(--grid); font-size: 14px; font-variant-numeric: tabular-nums;
 }
-.cost-pop {
-  position: absolute; top: calc(100% + 8px); left: 0; z-index: 15;
-  flex-direction: column; gap: 6px;
-  width: 300px; max-width: calc(100vw - 24px); padding: 12px 14px;
-  font-size: 13px; font-weight: 400; line-height: 1.35; color: var(--text-2);
-  background: var(--surface); border: 1px solid var(--axis); border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0,0,0,.14);
-  display: none;
-}
-.cost:hover .cost-pop, .cost:focus .cost-pop, .cost:focus-within .cost-pop {
-  display: flex; animation: cost-in .15s ease;
-}
-@keyframes cost-in { from { opacity: 0; transform: translateY(-4px); } }
-.cost-title { font-weight: 600; color: var(--text); }
-.cost-title small, .cost-row small { font-weight: 400; color: var(--muted); }
-.cost-row { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
-.cost-row > span:first-child { display: flex; flex-direction: column; }
-.cost-row > span:last-child { white-space: nowrap; color: var(--text); }
-.cost-row.sum { font-weight: 600; color: var(--text); padding-top: 4px; border-top: 1px solid var(--grid); }
-.cost-sep { height: 1px; background: var(--grid); margin: 2px 0; }
-.cost-sub { font-size: 12px; color: var(--muted); margin-top: -4px; }
-.cost-row.saving > span:last-child { color: #006300; }
-.cost-row.saving.strong, .cost-row.saving.strong > span:last-child { color: #006300; font-weight: 600; }
-.cost-ratio { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--grid); }
-.cost-ratio i { background: var(--series-4); }
-.cost-ratio b { background: var(--series-1); }
-.cost-ratio-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -2px; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cost-row.saving > span:last-child, :root:not([data-theme="light"]) .cost-row.saving.strong { color: #0ca30c; }
-}
-:root[data-theme="dark"] .cost-row.saving > span:last-child, :root[data-theme="dark"] .cost-row.saving.strong { color: #0ca30c; }
+.ledger-row > span:first-child { display: flex; flex-direction: column; }
+.ledger-row small { font-size: 12px; color: var(--muted); }
+.ledger-row > span:last-child { white-space: nowrap; font-weight: 500; }
+.ledger-row.credit > span:last-child { color: var(--gain); }
+.ledger-row.total { border-top: 2px solid var(--axis); font-weight: 650; font-size: 16px; }
+.ledger-row.total > span:last-child { font-weight: 700; }
+.ledger-row.total small { font-weight: 400; font-size: 12px; }
+.ratio { display: flex; gap: 2px; height: 8px; margin-top: 12px; border-radius: 4px; overflow: hidden; background: var(--grid); }
+.ratio i, .ratio-legend i { background: var(--series-4); }
+.ratio b, .ratio-legend b { background: var(--series-1); }
+.ratio-legend { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--text-2); }
+.ratio-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ratio-legend i, .ratio-legend b { width: 8px; height: 8px; border-radius: 2px; }
+.money-note { margin: 10px 0 0; font-size: 13px; color: var(--text-2); }
+.kpi-money { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--grid); }
+:root { --gain: #006300; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --gain: #0ca30c; } }
+:root[data-theme="dark"] { --gain: #0ca30c; }
 
 /* ---------- Zeitraumauswahl ---------- */
 .periods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }

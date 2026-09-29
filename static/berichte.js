@@ -87,7 +87,7 @@ function sentence(d) {
   let text = parts.join(", ");
   if (d.grid_sell >= 100) text += `. ${fmtEnergy(d.grid_sell)} wurden eingespeist`;
   if (d.soc_max != null) text += `. Die Batterie war zwischen ${fmtPct(d.soc_min)} und ${fmtPct(d.soc_max)} geladen`;
-  if (d.cost) text += `. Gekaufter Strom kostete ${Cost.money(d.cost.bought)}, der selbst erzeugte Strom hat ${Cost.money(d.cost.saved)} gespart`;
+  if (d.cost) text += `. Die PV hat ${Cost.money(d.cost.benefit)} eingebracht (${Cost.money(d.cost.saved)} gespart, ${Cost.money(d.cost.feed_in)} Einspeisevergütung)`;
   return text ? `${text}.` : "";
 }
 
@@ -222,7 +222,8 @@ function renderDay() {
   $("k-battery-sub").textContent = `geladen · ${fmtEnergy(d.ess_discharge)} entladen`;
   $("k-grid").textContent = fmtEnergy(d.grid_buy);
   $("k-grid-sub").textContent = `Bezug · ${fmtEnergy(d.grid_sell)} eingespeist`;
-  $("k-grid-cost").innerHTML = Cost.html(d.cost, `Stromkosten am ${tinyDate(d.date)}`);
+  $("k-grid-cost").textContent = d.cost ? `${Cost.money(d.cost.bought)} gekauft · ${Cost.money(d.cost.feed_in)} Vergütung` : "";
+  $("day-money").innerHTML = Cost.card(d.cost);
 
   const fromBattery = Math.max(0, d.consumption - d.pv_direct - d.grid_buy);
   renderSplit($("split-source"), $("split-source-legend"), [
@@ -261,9 +262,9 @@ function renderOverview() {
     ["Netzbezug", fmtEnergy(t.grid_buy)],
     ["Einspeisung", fmtEnergy(t.grid_sell)],
     ["Autarkie", fmtPct(t.autarky)],
-    ["Gekaufter Strom", Cost.html(t.cost, "Alle Exporte")],
     ["Bester Tag", best ? `${fmtEnergy(best.production)} <small>${tinyDate(best.date)}</small>` : "–"],
   ].map(([l, v]) => `<div><span class="label">${l}</span><span class="num">${v}</span></div>`).join("");
+  $("overview-money").innerHTML = Cost.card(t.cost);
 
   const series = [
     { key: "production", label: "Erzeugung", slot: 1 },
@@ -298,12 +299,12 @@ function renderOverview() {
     options: opts,
   });
 
-  const head = ["Tag", "Erzeugung", "Verbrauch", "Netzbezug", "Einspeisung", "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Gekaufter Strom", "Durch PV gespart"];
+  const head = ["Tag", "Erzeugung", "Verbrauch", "Netzbezug", "Einspeisung", "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Gekaufter Strom", "Einspeisevergütung", "Durch PV gespart", "Saldo"];
   $("overview-table").innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>` +
     rows.slice().reverse().map((r) => `<tr><td><a href="#${r.date}" data-day="${r.date}">${shortDate(r.date)}</a></td>` +
       [r.production, r.consumption, r.grid_buy, r.grid_sell, r.ess_charge, r.ess_discharge].map((v) => `<td>${fmtEnergy(v)}</td>`).join("") +
       `<td>${fmtPct(r.autarky)}</td><td>${fmtPct(r.self_consumption)}</td>` +
-      `<td>${Cost.money(r.cost?.bought)}</td><td>${Cost.money(r.cost?.saved)}</td></tr>`).join("") + "</tbody>";
+      [r.cost?.bought, r.cost?.feed_in, r.cost?.saved, r.cost?.balance].map((v) => `<td>${Cost.money(v)}</td>`).join("") + "</tr>").join("") + "</tbody>";
 }
 
 function renderFiles() {
