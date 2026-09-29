@@ -16,6 +16,7 @@ import json
 import math
 import os
 import random
+import signal
 import sqlite3
 import sys
 import threading
@@ -31,6 +32,12 @@ from tariff import costs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
+# Ordner für config.json, Datenbank und Exporte (im Docker-Container /data).
+DATA_DIR = os.path.abspath(os.environ.get("FEMS_DATA_DIR") or HERE)
+
+
+def data_path(path):
+    return path if os.path.isabs(path) else os.path.join(DATA_DIR, path)
 
 DEFAULTS = {
     "fems_url": "http://192.168.178.50",
@@ -510,7 +517,8 @@ class App:
         db = cfg["database"]
         if self.demo and db == DEFAULTS["database"]:
             db = "demo.sqlite"
-        self.store = Store(db if os.path.isabs(db) else os.path.join(HERE, db))
+        os.makedirs(DATA_DIR, exist_ok=True)
+        self.store = Store(data_path(db))
         if self.demo:
             self.client = DemoClient()
             if self.store.is_empty():
@@ -521,7 +529,7 @@ class App:
             self.client = FemsClient(cfg["fems_url"], cfg["username"], cfg["password"], cfg["timeout_seconds"])
         self.poller = Poller(self.client, self.store, cfg["poll_seconds"], cfg["store_seconds"])
         folder = cfg["export_dir"]
-        self.exports = ExportLibrary(folder if os.path.isabs(folder) else os.path.join(HERE, folder))
+        self.exports = ExportLibrary(data_path(folder))
 
     def costs(self, days):
         return costs(days, float(self.cfg["base_price_month"]), float(self.cfg["price_per_kwh"]))
@@ -545,7 +553,7 @@ def check(cfg):
 
 def main():
     ap = argparse.ArgumentParser(description="Lokales FEMS-Dashboard")
-    ap.add_argument("--config", default=os.path.join(HERE, "config.json"))
+    ap.add_argument("--config", default=os.path.join(DATA_DIR, "config.json"))
     ap.add_argument("--demo", action="store_true", help="simulierte Daten statt FEMS")
     ap.add_argument("--check", action="store_true", help="Verbindung testen und Kanäle auflisten")
     ap.add_argument("--port", type=int)
@@ -561,9 +569,15 @@ def main():
 
     app = App(cfg)
     app.poller.start()
+
+    def stop(_signum, _frame):  # docker stop sendet SIGTERM
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop)
+
     server = ThreadingHTTPServer((cfg["listen_host"], cfg["listen_port"]), make_handler(app))
     src = "Demo-Modus" if app.demo else cfg["fems_url"]
     print(f"FEMS-Dashboard ({src}) läuft auf http://{cfg['listen_host']}:{cfg['listen_port']}/")
+    print(f"Daten: {DATA_DIR}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

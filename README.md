@@ -60,6 +60,8 @@ Ohne FEMS (zum Anschauen): `python3 server.py --demo` erzeugt 60 Tage simulierte
 | `price_per_kwh` | Arbeitspreis in €/kWh | `0.326` |
 
 Alle Werte lassen sich auch über Umgebungsvariablen setzen, z. B. `FEMS_FEMS_URL=http://192.168.0.23`.
+Der Ordner für `config.json`, Datenbank und Exporte ist standardmäßig der Programmordner;
+`FEMS_DATA_DIR` legt einen anderen fest.
 
 ## Berichte aus dem FEMS-Datenexport
 
@@ -126,6 +128,56 @@ eingerechnet.
 
 Die Historie beginnt mit dem ersten Start des Servers. Damit sie lückenlos bleibt, sollte der
 Server dauerhaft laufen, z. B. auf einem Raspberry Pi oder NAS.
+
+## Docker / Portainer
+
+Bei jedem Push auf `main` baut GitHub Actions ein Image für amd64 und arm64 (z. B. Raspberry Pi,
+Synology) und veröffentlicht es als `ghcr.io/rabowke1/fenecon-dashboard:latest`.
+
+### In Portainer einrichten
+
+1. **Zugang zur Registry** (nur nötig, solange das Paket privat ist): Auf GitHub unter
+   *Settings → Developer settings → Personal access tokens* einen Token mit dem Recht
+   `read:packages` anlegen. In Portainer unter *Registries → Add registry → Custom registry*
+   eintragen: URL `ghcr.io`, Benutzername = GitHub-Name, Passwort = Token.
+   Alternativ das Paket auf GitHub unter *Packages → fenecon-dashboard → Package settings*
+   öffentlich machen, dann entfällt dieser Schritt.
+2. *Stacks → Add stack*, Name `fenecon-dashboard`, Inhalt von [`docker-compose.yml`](docker-compose.yml)
+   in den Web-Editor kopieren und **IP-Adresse des FEMS** sowie Tarif anpassen.
+3. *Deploy the stack*. Das Dashboard ist danach unter `http://<Docker-Host>:8080/` erreichbar.
+
+Updates: Im Stack *Pull and redeploy* bzw. *Update the stack* mit „Re-pull image“ wählen.
+Die Daten liegen im Volume `fenecon-data` und bleiben dabei erhalten.
+
+### Einstellungen im Container
+
+Jede Einstellung aus der Tabelle oben lässt sich als Umgebungsvariable mit dem Präfix `FEMS_` setzen,
+z. B. `FEMS_FEMS_URL`, `FEMS_PASSWORD`, `FEMS_PRICE_PER_KWH`. Alternativ eine `config.json` in das
+Volume legen; Umgebungsvariablen haben Vorrang.
+
+Im Volume `/data` liegen:
+
+| Pfad | Inhalt |
+|---|---|
+| `/data/fems.sqlite` | alle aufgezeichneten Werte – diese Datei sichern |
+| `/data/exports/` | Excel-Exporte für die Berichte (auch per Hochladen auf der Seite) |
+| `/data/config.json` | optional, statt der Umgebungsvariablen |
+
+Der Container läuft als Benutzer mit UID 1000. Wer statt des benannten Volumes einen Ordner des
+Hosts einbindet (`/pfad/auf/host:/data`), muss diesem Ordner die Rechte geben:
+`sudo chown 1000:1000 /pfad/auf/host`.
+
+Die Zeitzone steht auf `Europe/Berlin` (Variable `TZ`); sie bestimmt, wo ein Tag beginnt und endet.
+
+### Ohne Registry direkt auf dem Docker-Host bauen
+
+```bash
+git clone https://github.com/Rabowke1/fenecon-dashboard.git
+cd fenecon-dashboard
+docker build -t fenecon-dashboard .
+```
+
+Dann in der `docker-compose.yml` `image: fenecon-dashboard` eintragen.
 
 ## Dauerbetrieb (Linux/systemd)
 

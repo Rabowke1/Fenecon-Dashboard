@@ -1,0 +1,22 @@
+# Stack für Portainer (Stacks > Add stack) oder "docker compose up -d".
+# Die Einstellungen stehen hier als Umgebungsvariablen; alternativ eine
+# config.json in das Datenvolume legen.
+services:
+  fenecon-dashboard:
+    image: ghcr.io/rabowke1/fenecon-dashboard:latest
+    container_name: fenecon-dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Europe/Berlin
+      FEMS_FEMS_URL: http://192.168.178.50   # IP-Adresse des FEMS
+      FEMS_USERNAME: x
+      FEMS_PASSWORD: user
+      FEMS_BASE_PRICE_MONTH: "11.90"          # Grundpreis €/Monat
+      FEMS_PRICE_PER_KWH: "0.326"             # Arbeitspreis €/kWh
+    volumes:
+      - fenecon-data:/data                    # Datenbank, Exporte, optional config.json
+
+volumes:
+  fenecon-data:

@@ -1,0 +1,7 @@
+.git
+.github
+__pycache__
+*.sqlite
+config.json
+exports
+test_*.py
