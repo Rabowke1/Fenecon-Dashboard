@@ -49,6 +49,12 @@ async function refreshLive() {
   for (const k of ["production", "consumption", "grid_buy", "grid_sell"]) $(`t-${k}`).textContent = fmtEnergy(t[k]);
   $("t-autarky").textContent = fmtPct(t.autarky);
   $("t-self_consumption").textContent = fmtPct(t.self_consumption);
+  const costKey = JSON.stringify(t.cost || null);
+  // Nicht neu zeichnen, solange das Kosten-Panel offen ist.
+  if (costKey !== refreshLive.costKey && !$("t-cost").matches(":hover, :focus-within")) {
+    refreshLive.costKey = costKey;
+    $("t-cost").innerHTML = Cost.html(t.cost, "Stromkosten heute");
+  }
 
   const when = data.ts ? new Date(data.ts * 1000).toLocaleTimeString("de-DE") : "–";
   const demo = data.demo ? " · Demo-Modus" : "";
@@ -197,7 +203,8 @@ function renderEnergy() {
     label: (c) => ` ${c.dataset.label}: ${fmtEnergy(c.parsed.y)}`,
     footer: (items) => {
       const r = rows[items[0].dataIndex];
-      return `Autarkie ${fmtPct(r.autarky)} · Eigenverbrauch ${fmtPct(r.self_consumption)}`;
+      return `Autarkie ${fmtPct(r.autarky)} · Eigenverbrauch ${fmtPct(r.self_consumption)}\n`
+        + `Stromkosten ${Cost.money(r.cost?.total)} (ohne PV ${Cost.money(r.cost?.without_pv.total)})`;
     },
   };
   opts.plugins.tooltip.footerColor = css("--text-2");
@@ -214,10 +221,11 @@ function renderEnergy() {
     type: "bar", data: { labels: rows.map((r) => labelFor(r.date)), datasets }, options: opts,
   });
 
-  const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch"];
+  const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Stromkosten", "Ohne PV"];
   const body = rows.slice().reverse().map((r) => [
     labelFor(r.date), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
     fmtEnergy(r.ess_charge), fmtEnergy(r.ess_discharge), fmtPct(r.autarky), fmtPct(r.self_consumption),
+    Cost.money(r.cost?.total), Cost.money(r.cost?.without_pv.total),
   ]);
   $("energy-table").innerHTML =
     `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead>` +

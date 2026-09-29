@@ -27,6 +27,7 @@ from datetime import date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from exports import ExportLibrary
+from tariff import costs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
@@ -44,6 +45,8 @@ DEFAULTS = {
     "demo": False,
     "export_dir": "exports",
     "max_upload_mb": 20,
+    "base_price_month": 11.90,
+    "price_per_kwh": 0.326,
 }
 
 # Leistungswerte (W) aus dem Summen-Component "_sum" des FEMS.
@@ -436,19 +439,26 @@ def make_handler(app):
                 self.send_json({"error": f"Datei nicht lesbar: {exc}"}, 400)
 
         def api_exports(self, q):
-            self.send_json(app.exports.overview())
+            overview = app.exports.overview()
+            for row in overview["days"]:
+                row["cost"] = app.costs([row])
+            overview["total"]["cost"] = app.costs(overview["days"])
+            self.send_json(overview)
 
         def api_export_day(self, q):
             day = app.exports.day(q.get("date", ""))
             if day is None:
                 return self.send_json({"error": "Für diesen Tag gibt es keinen Export"}, 404)
-            self.send_json(day)
+            self.send_json({**day, "cost": app.costs([day])})
 
         def api_live(self, q):
             today = date.today()
             days = app.store.daily_energy(today, today)
+            today_row = add_ratios(days[0]) if days else None
+            if today_row:
+                today_row["cost"] = app.costs([today_row])
             self.send_json({**app.poller.live, "demo": app.demo, "poll_seconds": app.cfg["poll_seconds"],
-                            "today": add_ratios(days[0]) if days else None})
+                            "today": today_row})
 
         def api_history(self, q):
             d = parse_day(q.get("date"), date.today())
@@ -466,8 +476,12 @@ def make_handler(app):
                              "month": date(last.year, 1, 1),
                              "year": date(last.year - 9, 1, 1)}[group]
             first = parse_day(q.get("from"), default_first)
+            days = app.store.daily_energy(first, last)
+            rows = rollup(days, group)
+            for row in rows:  # Kosten je Zeitraum aus den zugehörigen Tagen
+                row["cost"] = app.costs([d for d in days if d["date"].startswith(row["date"])])
             self.send_json({"group": group, "from": first.isoformat(), "to": last.isoformat(),
-                            "rows": rollup(app.store.daily_energy(first, last), group)})
+                            "rows": rows, "cost": app.costs(days)})
 
         def api_channels(self, q):
             if app.demo:
@@ -496,6 +510,9 @@ class App:
         self.poller = Poller(self.client, self.store, cfg["poll_seconds"], cfg["store_seconds"])
         folder = cfg["export_dir"]
         self.exports = ExportLibrary(folder if os.path.isabs(folder) else os.path.join(HERE, folder))
+
+    def costs(self, days):
+        return costs(days, float(self.cfg["base_price_month"]), float(self.cfg["price_per_kwh"]))
 
 
 def check(cfg):

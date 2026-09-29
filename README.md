@@ -54,6 +54,8 @@ Ohne FEMS (zum Anschauen): `python3 server.py --demo` erzeugt 60 Tage simulierte
 | `database` | SQLite-Datei | `fems.sqlite` |
 | `export_dir` | Ordner für die Excel-Exporte | `exports` |
 | `max_upload_mb` | maximale Größe beim Hochladen | `20` |
+| `base_price_month` | Grundpreis des Stromtarifs in €/Monat | `11.90` |
+| `price_per_kwh` | Arbeitspreis in €/kWh | `0.326` |
 
 Alle Werte lassen sich auch über Umgebungsvariablen setzen, z. B. `FEMS_FEMS_URL=http://192.168.0.23`.
 
@@ -98,6 +100,20 @@ Pro Minute wird ein Datensatz mit Mittelwerten und den Zählerständen gespeiche
 (etwa 50 MB pro Jahr). Die Tagesenergie ergibt sich aus der Differenz der FEMS-Zähler;
 fehlen diese, wird die Leistung aufintegriert.
 
+### Stromkosten
+
+Für jeden angezeigten Zeitraum (heute, ein Berichtstag, alle Exporte, jede Zeile der Energiebilanz)
+werden die Stromkosten berechnet:
+
+- **Mit PV bezahlt** = Grundpreis anteilig + Netzbezug × Arbeitspreis
+- **Ohne PV** (fiktiv) = Grundpreis anteilig + gesamter Verbrauch × Arbeitspreis
+- **Ersparnis** = Ohne PV − Mit PV
+
+Der Grundpreis wird tageweise auf den Monat verteilt: Ein Tag im September kostet 11,90 € / 30,
+ein ganzer Monat genau 11,90 €. Fährt man mit der Maus über den Betrag (oder tippt ihn auf dem
+Handy an), erscheint die Aufschlüsselung samt Kosten ohne PV. Eine Einspeisevergütung ist nicht
+eingerechnet.
+
 - **Autarkie** = 1 − Netzbezug / Verbrauch
 - **Eigenverbrauch** = 1 − Einspeisung / Erzeugung
 
@@ -139,5 +155,5 @@ WantedBy=multi-user.target
 ## Tests
 
 ```bash
-python3 -m unittest test_server test_exports
+python3 -m unittest test_server test_exports test_tariff
 ```

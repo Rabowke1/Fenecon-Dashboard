@@ -10,5 +10,7 @@
   "timeout_seconds": 8,
   "demo": false,
   "export_dir": "exports",
-  "max_upload_mb": 20
+  "max_upload_mb": 20,
+  "base_price_month": 11.9,
+  "price_per_kwh": 0.326
 }
