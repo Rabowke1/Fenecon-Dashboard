@@ -1,11 +1,15 @@
-"""Stromkosten nach Tarif: Grundpreis pro Monat plus Arbeitspreis je kWh Netzbezug.
+"""Stromkosten nach Tarif.
 
-Der Grundpreis wird tageweise auf den jeweiligen Monat verteilt (ein ganzer Monat
-kostet also genau den Monatsgrundpreis). Zum Vergleich wird berechnet, was der
-gesamte Verbrauch ohne PV-Anlage und Batterie aus dem Netz gekostet hätte.
+Verglichen wird nur der Strom selbst, zum Arbeitspreis je kWh:
+    gekaufter Strom      = Netzbezug × Arbeitspreis
+    selbst erzeugt       = (Verbrauch − Netzbezug) × Arbeitspreis   -> Ersparnis durch PV
+    ohne PV              = Verbrauch × Arbeitspreis                 (= gekauft + selbst erzeugt)
+Der Grundpreis fällt mit und ohne PV gleich an und wird nur getrennt ausgewiesen,
+tageweise auf den jeweiligen Monat verteilt (ein ganzer Monat = Monatsgrundpreis).
 """
 
 import calendar
+from decimal import ROUND_HALF_UP, Decimal
 from datetime import date
 
 
@@ -15,27 +19,33 @@ def base_share(day, base_price_month):
     return base_price_month / calendar.monthrange(d.year, d.month)[1]
 
 
-def costs(days, base_price_month, price_per_kwh):
-    """days: Einträge mit 'date', 'grid_buy' und 'consumption' (Wh).
+def cents(value):
+    """Kaufmännisch auf ganze Cent runden."""
+    return Decimal(repr(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-    Liefert die Kosten in Euro für den gesamten Zeitraum.
+
+def costs(days, base_price_month, price_per_kwh):
+    """days: Einträge mit 'date', 'grid_buy' und 'consumption' (Wh). Beträge in Euro.
+
+    Einzelposten werden auf Cent gerundet und die Summen daraus gebildet,
+    damit die Anzeige immer aufgeht.
     """
-    base = sum(base_share(d["date"], base_price_month) for d in days)
     grid_kwh = sum(d.get("grid_buy") or 0 for d in days) / 1000
-    cons_kwh = sum(d.get("consumption") or 0 for d in days) / 1000
-    actual = base + grid_kwh * price_per_kwh
-    without = base + cons_kwh * price_per_kwh
+    cons_kwh = max(grid_kwh, sum(d.get("consumption") or 0 for d in days) / 1000)
+    self_kwh = cons_kwh - grid_kwh
+    bought = cents(grid_kwh * price_per_kwh)
+    saved = cents(self_kwh * price_per_kwh)
+    base = cents(sum(base_share(d["date"], base_price_month) for d in days))
     return {
         "days": len(days),
-        "base": round(base, 2),
         "grid_kwh": round(grid_kwh, 2),
-        "energy": round(grid_kwh * price_per_kwh, 2),
-        "total": round(actual, 2),
-        "without_pv": {
-            "consumption_kwh": round(cons_kwh, 2),
-            "energy": round(cons_kwh * price_per_kwh, 2),
-            "total": round(without, 2),
-        },
-        "savings": round(without - actual, 2),
+        "self_kwh": round(self_kwh, 2),
+        "consumption_kwh": round(cons_kwh, 2),
+        "self_share": round(self_kwh / cons_kwh * 100, 1) if cons_kwh > 0 else None,
+        "bought": float(bought),             # gekaufter Strom
+        "saved": float(saved),               # selbst erzeugter Strom = Ersparnis
+        "without_pv": float(bought + saved),  # gesamter Verbrauch zum Arbeitspreis
+        "base": float(base),                 # Grundpreis anteilig, fällt immer an
+        "total": float(bought + base),       # tatsächlich bezahlt
         "tariff": {"base_price_month": base_price_month, "price_per_kwh": price_per_kwh},
     }

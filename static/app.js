@@ -216,7 +216,7 @@ function renderStats() {
   // Nicht neu zeichnen, solange das Kosten-Panel offen ist.
   if (costKey !== renderStats.costKey && !$("t-cost").matches(":hover, :focus-within")) {
     renderStats.costKey = costKey;
-    $("t-cost").innerHTML = Cost.html(t.cost, `Stromkosten · ${rangeLabel(range)}`);
+    $("t-cost").innerHTML = Cost.html(t.cost, rangeLabel(range));
   }
 
   // Hinweis, wenn für einen Teil des Zeitraums noch keine Aufzeichnung existiert.
@@ -310,7 +310,7 @@ function renderEnergy() {
     footer: (items) => {
       const r = rows[items[0].dataIndex];
       return `Autarkie ${fmtPct(r.autarky)} · Eigenverbrauch ${fmtPct(r.self_consumption)}\n`
-        + `Stromkosten ${Cost.money(r.cost?.total)} (ohne PV ${Cost.money(r.cost?.without_pv.total)})`;
+        + Cost.summary(r.cost);
     },
   };
   opts.plugins.tooltip.footerColor = css("--text-2");
@@ -342,11 +342,11 @@ function renderEnergy() {
     type: "bar", data: { labels: rows.map((r) => labelFor(r.date, group)), datasets }, options: opts,
   });
 
-  const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Stromkosten", "Ohne PV"];
+  const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Gekaufter Strom", "Durch PV gespart"];
   const body = rows.slice().reverse().map((r) => [
     labelFor(r.date, group), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
     fmtEnergy(r.ess_charge), fmtEnergy(r.ess_discharge), fmtPct(r.autarky), fmtPct(r.self_consumption),
-    Cost.money(r.cost?.total), Cost.money(r.cost?.without_pv.total),
+    Cost.money(r.cost?.bought), Cost.money(r.cost?.saved),
   ]);
   $("energy-table").innerHTML =
     `<thead><tr>${head.map((h) => `<th>${h}</th>`).join("")}</tr></thead>` +

@@ -277,11 +277,17 @@ td a { color: inherit; }
 .cost-row > span:last-child { white-space: nowrap; color: var(--text); }
 .cost-row.sum { font-weight: 600; color: var(--text); padding-top: 4px; border-top: 1px solid var(--grid); }
 .cost-sep { height: 1px; background: var(--grid); margin: 2px 0; }
-.cost-row.saving, .cost-row.saving > span:last-child { color: #006300; font-weight: 600; }
+.cost-sub { font-size: 12px; color: var(--muted); margin-top: -4px; }
+.cost-row.saving > span:last-child { color: #006300; }
+.cost-row.saving.strong, .cost-row.saving.strong > span:last-child { color: #006300; font-weight: 600; }
+.cost-ratio { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; background: var(--grid); }
+.cost-ratio i { background: var(--series-4); }
+.cost-ratio b { background: var(--series-1); }
+.cost-ratio-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: -2px; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cost-row.saving, :root:not([data-theme="light"]) .cost-row.saving > span:last-child { color: #0ca30c; }
+  :root:not([data-theme="light"]) .cost-row.saving > span:last-child, :root:not([data-theme="light"]) .cost-row.saving.strong { color: #0ca30c; }
 }
-:root[data-theme="dark"] .cost-row.saving, :root[data-theme="dark"] .cost-row.saving > span:last-child { color: #0ca30c; }
+:root[data-theme="dark"] .cost-row.saving > span:last-child, :root[data-theme="dark"] .cost-row.saving.strong { color: #0ca30c; }
 
 /* ---------- Zeitraumauswahl ---------- */
 .periods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
