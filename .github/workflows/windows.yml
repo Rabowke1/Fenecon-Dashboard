@@ -1,0 +1,74 @@
+name: Windows-EXE
+
+on:
+  push:
+    branches: [windows]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: PyInstaller installieren
+        run: python -m pip install pyinstaller
+
+      - name: Tests
+        run: python -m unittest test_server test_exports test_tariff
+
+      - name: EXE bauen
+        run: python -m PyInstaller -y FeneconDashboard.spec
+
+      - name: EXE im Demo-Modus testen
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "smoke"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item dist\FeneconDashboard.exe $dir
+          $p = Start-Process -FilePath "$dir\FeneconDashboard.exe" -ArgumentList "--demo","--port","8099","--no-browser" `
+               -WorkingDirectory $dir -PassThru -RedirectStandardOutput "$dir\out.log" -RedirectStandardError "$dir\err.log"
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 2
+            try { $ok = (Invoke-RestMethod http://127.0.0.1:8099/api/live).ok } catch { }
+          }
+          $page = (Invoke-WebRequest http://127.0.0.1:8099/berichte.html -UseBasicParsing).Content
+          Stop-Process -Id $p.Id -Force
+          Get-Content "$dir\out.log", "$dir\err.log" -ErrorAction SilentlyContinue
+          if (-not $ok) { throw "API meldet keine Daten" }
+          if ($page -notmatch "Berichte") { throw "Berichte-Seite fehlt" }
+          if (-not (Test-Path "$dir\config.json")) { throw "config.json wurde nicht angelegt" }
+          if (-not (Test-Path "$dir\demo.sqlite")) { throw "Datenbank wurde nicht angelegt" }
+          Write-Host "EXE laeuft."
+
+      - name: Paket zusammenstellen
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item dist\FeneconDashboard.exe, windows\LIESMICH.txt package\
+          Compress-Archive -Path package\* -DestinationPath FeneconDashboard-windows.zip -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FeneconDashboard-windows
+          path: package/
+
+      - name: Download-Seite (Release "windows-latest") aktualisieren
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -f windows-latest
+          git push -f origin windows-latest
+          gh release delete windows-latest --yes || true
+          gh release create windows-latest FeneconDashboard-windows.zip --prerelease \
+            --title "Windows-Testversion" \
+            --notes "Automatisch gebaut aus dem Branch windows (Commit ${GITHUB_SHA::7}). ZIP entpacken und LIESMICH.txt lesen."

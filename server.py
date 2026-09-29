@@ -16,6 +16,7 @@ import json
 import math
 import os
 import random
+import shutil
 import signal
 import sqlite3
 import sys
@@ -24,16 +25,21 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from datetime import date, datetime, timedelta
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from exports import ExportLibrary
 from tariff import costs
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+FROZEN = getattr(sys, "frozen", False)  # als .exe (PyInstaller) gestartet
+# Programmdateien (bei der .exe im entpackten Temp-Ordner)
+HERE = getattr(sys, "_MEIPASS", None) or os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(HERE, "static")
-# Ordner für config.json, Datenbank und Exporte (im Docker-Container /data).
-DATA_DIR = os.path.abspath(os.environ.get("FEMS_DATA_DIR") or HERE)
+# Ordner für config.json, Datenbank und Exporte: bei der .exe neben der .exe,
+# im Docker-Container /data, sonst der Programmordner.
+DATA_DIR = os.path.abspath(os.environ.get("FEMS_DATA_DIR")
+                           or (os.path.dirname(sys.executable) if FROZEN else HERE))
 
 
 def data_path(path):
@@ -559,7 +565,14 @@ def main():
     ap.add_argument("--demo", action="store_true", help="simulierte Daten statt FEMS")
     ap.add_argument("--check", action="store_true", help="Verbindung testen und Kanäle auflisten")
     ap.add_argument("--port", type=int)
+    ap.add_argument("--no-browser", action="store_true", help="Browser nicht automatisch öffnen (.exe)")
     args = ap.parse_args()
+
+    # Beim ersten Start der .exe eine config.json zum Bearbeiten anlegen.
+    if FROZEN and not os.path.exists(args.config):
+        shutil.copy(os.path.join(HERE, "config.example.json"), args.config)
+        print(f"Neue Einstellungsdatei angelegt: {args.config}")
+        print("Bitte dort die IP-Adresse des FEMS eintragen (fems_url) und neu starten.\n")
 
     cfg = load_config(args.config)
     if args.demo:
@@ -580,6 +593,11 @@ def main():
     src = "Demo-Modus" if app.demo else cfg["fems_url"]
     print(f"FEMS-Dashboard ({src}) läuft auf http://{cfg['listen_host']}:{cfg['listen_port']}/")
     print(f"Daten: {DATA_DIR}")
+    if FROZEN:
+        print("Zum Beenden dieses Fenster schließen oder Strg+C drücken.")
+        if not args.no_browser:
+            host = "127.0.0.1" if cfg["listen_host"] in ("0.0.0.0", "") else cfg["listen_host"]
+            webbrowser.open(f"http://{host}:{cfg['listen_port']}/")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -588,5 +606,27 @@ def main():
     return 0
 
 
+def main_exe():
+    """Einstieg der .exe: Fehler anzeigen statt das Fenster sofort zu schließen."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace", line_buffering=True)
+    try:
+        code = main()
+    except SystemExit as exc:
+        code = exc.code
+    except OSError as exc:
+        print(f"\nFehler: {exc}")
+        if getattr(exc, "winerror", None) == 10048 or exc.errno in (98, 10048):
+            print("Der Port ist schon belegt – läuft das Dashboard bereits? Anderen Port mit --port wählen.")
+        code = 1
+    except Exception as exc:
+        print(f"\nUnerwarteter Fehler: {type(exc).__name__}: {exc}")
+        code = 1
+    if code:
+        input("\nEnter drücken zum Schließen …")
+    return code
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main_exe() if FROZEN else main())

@@ -129,6 +129,22 @@ eingerechnet.
 Die Historie beginnt mit dem ersten Start des Servers. Damit sie lückenlos bleibt, sollte der
 Server dauerhaft laufen, z. B. auf einem Raspberry Pi oder NAS.
 
+## Windows (.exe zum Testen)
+
+Im Branch `windows` baut GitHub Actions bei jedem Push eine eigenständige `FeneconDashboard.exe`;
+Python muss auf dem PC nicht installiert sein.
+
+- **Download:** Auf GitHub unter *Releases → Windows-Testversion* die Datei
+  `FeneconDashboard-windows.zip` laden (alternativ unter *Actions → Windows-EXE → Artifacts*).
+- ZIP an einen festen Ort entpacken (z. B. `C:\FeneconDashboard`) und `FeneconDashboard.exe` starten.
+  Beim ersten Start wird daneben eine `config.json` angelegt: IP-Adresse des FEMS eintragen und neu starten.
+- Der Browser öffnet das Dashboard automatisch. Datenbank und Exporte liegen neben der `.exe`.
+- Die `.exe` ist nicht signiert: Windows SmartScreen fragt beim ersten Start nach
+  (*Weitere Informationen → Trotzdem ausführen*).
+
+Selbst bauen auf einem Windows-PC mit Python 3: `windows\build.bat` ausführen,
+Ergebnis in `dist\FeneconDashboard.exe`.
+
 ## Docker / Portainer
 
 Bei jedem Push auf `main` baut GitHub Actions ein Image für amd64 und arm64 (z. B. Raspberry Pi,

@@ -1,0 +1,28 @@
+Fenecon-Dashboard fuer Windows
+==============================
+
+1. Den Ordner an einen festen Ort entpacken, z. B. C:\FeneconDashboard
+   (nicht im Download-Ordner starten, dort liegen spaeter auch die Daten).
+
+2. FeneconDashboard.exe doppelklicken.
+   Windows zeigt beim ersten Start evtl. "Der Computer wurde durch Windows geschuetzt":
+   auf "Weitere Informationen" und dann "Trotzdem ausfuehren" klicken
+   (die Datei ist nicht signiert). Die Windows-Firewall kann nach dem Netzwerkzugriff
+   fragen: "Private Netzwerke" erlauben.
+
+3. Beim ersten Start wird config.json neben der .exe angelegt. Mit dem Editor oeffnen,
+   bei "fems_url" die IP-Adresse des FEMS eintragen, speichern, Programm neu starten.
+
+4. Der Browser oeffnet http://127.0.0.1:8080/ automatisch.
+   Zum Ausprobieren ohne FEMS: in der Eingabeaufforderung
+       FeneconDashboard.exe --demo
+   Verbindung testen:
+       FeneconDashboard.exe --check
+
+Neben der .exe liegen danach:
+   config.json   Einstellungen (FEMS-Adresse, Tarif, Port)
+   fems.sqlite   alle aufgezeichneten Werte (diese Datei sichern)
+   exports\      Excel-Exporte fuer die Seite "Berichte"
+
+Beenden: das schwarze Konsolenfenster schliessen oder Strg+C druecken.
+Aufgezeichnet wird nur, solange das Programm laeuft.
