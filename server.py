@@ -114,12 +114,14 @@ class FemsClient:
         token = base64.b64encode(f"{username}:{password}".encode()).decode()
         self.headers = {"Authorization": "Basic " + token, "Accept": "application/json"}
         self.timeout = timeout
+        # Das FEMS steht im Heimnetz: keinen System- oder Umgebungs-Proxy verwenden.
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def channels(self, address):
         """Liefert {"_sum/EssSoc": 57, ...}; address darf Regex enthalten ("_sum/.*")."""
         url = self.base + "/rest/channel/" + urllib.parse.quote(address, safe="/.*|()")
         req = urllib.request.Request(url, headers=self.headers)
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+        with self.opener.open(req, timeout=self.timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         items = data if isinstance(data, list) else [data]
         return {it["address"]: it.get("value") for it in items if "address" in it}
