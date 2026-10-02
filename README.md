@@ -236,25 +236,31 @@ docker build -t fenecon-dashboard .
 
 Dann in der `docker-compose.yml` `image: fenecon-dashboard` eintragen.
 
-## Dauerbetrieb (Linux/systemd)
+## Dauerbetrieb als Linux-Dienst (systemd)
 
-```ini
-# /etc/systemd/system/fems-dashboard.service
-[Unit]
-Description=FEMS-Dashboard
-After=network-online.target
+Damit das Dashboard beim Booten startet und nach einem Absturz automatisch neu startet:
 
-[Service]
-WorkingDirectory=/home/pi/Fenecon-Dashboard
-ExecStart=/usr/bin/python3 server.py
-Restart=always
-User=pi
-
-[Install]
-WantedBy=multi-user.target
+```bash
+cd fenecon-dashboard
+sudo ./linux/install.sh
 ```
 
-`sudo systemctl enable --now fems-dashboard`
+Das Skript richtet den Dienst `fenecon-dashboard` für den aktuellen Programmordner ein. Er läuft
+als der Benutzer, dem der Ordner gehört (nicht als root); mit `sudo SERVICE_USER=pi ./linux/install.sh`
+lässt sich ein anderer Benutzer wählen. Fehlt `config.json`, wird sie angelegt. Nach einem
+`git pull` das Skript einfach erneut ausführen – es aktualisiert den Dienst und startet ihn neu.
+
+| Aufgabe | Befehl |
+|---|---|
+| Status anzeigen | `systemctl status fenecon-dashboard` |
+| Neu starten (z. B. nach Änderung der `config.json`) | `sudo systemctl restart fenecon-dashboard` |
+| Stoppen / Starten | `sudo systemctl stop fenecon-dashboard` / `sudo systemctl start fenecon-dashboard` |
+| Autostart aus- / einschalten | `sudo systemctl disable fenecon-dashboard` / `sudo systemctl enable fenecon-dashboard` |
+| Protokoll live verfolgen | `journalctl -u fenecon-dashboard -f` |
+| Dienst entfernen (Daten bleiben) | `sudo ./linux/install.sh --remove` |
+
+Die Vorlage liegt in [`linux/fenecon-dashboard.service`](linux/fenecon-dashboard.service), falls der
+Dienst von Hand eingerichtet werden soll.
 
 ## JSON-API des Dashboards
 
