@@ -231,10 +231,14 @@ function renderStats() {
   }
   const warnings = energyData.warnings || [];
   if (warnings.length) {
-    const list = warnings.slice(0, 3).map((w) =>
-      `${fmtDay(w.date, { day: "2-digit", month: "2-digit" })}: Verbrauch ${fmtEnergy(w.consumption)}, laut Bilanz ${fmtEnergy(w.expected)}`).join("; ");
-    notice.textContent = `${notice.textContent ? notice.textContent + " " : ""}Unplausible Werte – ${list}`
-      + `${warnings.length > 3 ? ` und ${warnings.length - 3} weitere Tage` : ""}. Details mit dem Aufruf „--check-data“ (siehe README).`;
+    const day = (w) => fmtDay(w.date, { day: "2-digit", month: "2-digit" });
+    const list = warnings.slice(0, 3).map((w) => w.corrected
+      ? `${day(w)}: Verbrauchszähler ${fmtEnergy(w.consumption)} → ${fmtEnergy(w.expected)} laut Energiebilanz`
+      : `${day(w)}: Verbrauch ${fmtEnergy(w.consumption)}, Bilanz unbrauchbar – nicht korrigiert`).join("; ");
+    const allCorrected = warnings.every((w) => w.corrected);
+    notice.textContent = `${notice.textContent ? notice.textContent + " " : ""}`
+      + `${allCorrected ? "Automatisch korrigiert" : "Unplausible Werte"} – ${list}`
+      + `${warnings.length > 3 ? ` und ${warnings.length - 3} weitere Tage` : ""}. Details mit „--check-data“ (siehe README).`;
   }
   notice.classList.toggle("warn", warnings.length > 0);
   notice.hidden = !notice.textContent;
@@ -347,7 +351,7 @@ function renderEnergy() {
 
   const head = ["Zeitraum", ...ENERGY_SERIES.map((s) => s.label), "Batterie geladen", "Batterie entladen", "Autarkie", "Eigenverbrauch", "Gekaufter Strom", "Einspeisevergütung", "Durch PV gespart", "Saldo"];
   const body = rows.slice().reverse().map((r) => [
-    labelFor(r.date, group), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
+    labelFor(r.date, group) + (r.warning?.corrected ? " *" : ""), ...ENERGY_SERIES.map((s) => fmtEnergy(r[s.key])),
     fmtEnergy(r.ess_charge), fmtEnergy(r.ess_discharge), fmtPct(r.autarky), fmtPct(r.self_consumption),
     Cost.money(r.cost?.bought), Cost.money(r.cost?.feed_in), Cost.money(r.cost?.saved), Cost.money(r.cost?.balance),
   ]);

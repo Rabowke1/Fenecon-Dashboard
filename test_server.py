@@ -112,6 +112,13 @@ class EnergyTests(unittest.TestCase):
         bad = server.check_balance({"production": 33500, "grid_buy": 2900, "ess_discharge": 16700,
                                     "ess_charge": 10000, "grid_sell": 100, "consumption": 2_835_200})
         self.assertEqual(bad["warning"]["expected"], 43000)
+        self.assertTrue(bad["warning"]["corrected"])
+        self.assertEqual(bad["consumption"], 43000)            # durch den Bilanzwert ersetzt
+        self.assertEqual(bad["warning"]["consumption"], 2_835_200)  # Zählerwert bleibt nachvollziehbar
+        broken = server.check_balance({"production": 0, "grid_buy": 0, "ess_discharge": 0,
+                                       "ess_charge": 9000, "grid_sell": 0, "consumption": 5000})
+        self.assertFalse(broken["warning"]["corrected"])
+        self.assertEqual(broken["consumption"], 5000)
 
     def test_first_date(self):
         self.assertIsNone(self.store.first_date())
