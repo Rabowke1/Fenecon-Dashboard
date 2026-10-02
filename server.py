@@ -56,6 +56,7 @@ DEFAULTS = {
     "base_price_month": 11.90,
     "price_per_kwh": 0.326,
     "feed_in_per_kwh": 0.0666,
+    "max_power_w": 50000,
 }
 
 # Leistungswerte (W) aus dem Summen-Component "_sum" des FEMS.
@@ -213,8 +214,10 @@ class DemoClient:
 # --------------------------------------------------------------------------
 
 class Store:
-    def __init__(self, path):
+    def __init__(self, path, max_power_w=50000):
         self.path = path
+        # Mehr Leistung als das kann kein Energiefluss haben; größere Zählersprünge sind Messfehler.
+        self.max_power_w = max_power_w
         self.lock = threading.Lock()
         with self.connect() as db:
             cols = ", ".join(f"{c} REAL" for c in COLUMNS)
@@ -265,31 +268,41 @@ class Store:
     # Dauer dem folgenden Messwert zugerechnet; längere Lücken bleiben leer.
     MAX_GAP_SECONDS = 6 * 3600
 
+    def _counter_window(self, start, end):
+        """Messwerte mit dem jeweils vorherigen Zählerstand (für Differenzen)."""
+        lags = ", ".join(f"LAG({c}) OVER w AS p_{c}" for c in FLOWS.values())
+        return (f"""SELECT *, LAG(ts) OVER w AS p_ts, {lags}
+                    FROM samples WHERE ts >= {int(start) - self.MAX_GAP_SECONDS} AND ts < {int(end)}
+                    WINDOW w AS (ORDER BY ts)""")
+
+    def _plausible(self, c):
+        """SQL-Bedingung: Zuwachs des Zählers c seit dem vorigen Messwert ist möglich."""
+        limit = f"{self.max_power_w} * 1.2 * (ts - p_ts) / 3600.0 + 10"
+        return (f"(p_{c} IS NOT NULL AND {c} >= p_{c} AND {c} - p_{c} <= {limit} "
+                f"AND ts - p_ts <= {self.MAX_GAP_SECONDS})")
+
     def daily_energy(self, first, last):
         """Energie (Wh) je Kalendertag.
 
         Summiert die Zuwächse der FEMS-Zähler zwischen aufeinanderfolgenden
-        Messwerten. Rücksprünge (Zähler zurückgesetzt, z. B. nach einem Update
-        oder Gerätetausch) werden übersprungen statt als Energie gezählt.
-        Fehlen die Zähler, wird die aufintegrierte Leistung verwendet.
+        Messwerten. Ist ein Zuwachs unmöglich – Zähler springt zurück (Reset,
+        Update) oder springt weiter, als es mit max_power_w in der Zeit geht
+        (Messfehler, z. B. ein einzelner Wert 0) –, zählt für dieses Intervall
+        die gemessene Leistung. Fehlen die Zähler ganz, ebenso.
         """
         start, _ = day_bounds(first)
         _, end = day_bounds(last)
-        lags = ", ".join(f"LAG({c}) OVER w AS p_{c}" for c in FLOWS.values())
         parts = []
         for flow, c in FLOWS.items():
             parts.append(
-                f"SUM(CASE WHEN {c} >= p_{c} AND ts - p_ts <= {self.MAX_GAP_SECONDS} THEN {c} - p_{c} ELSE 0 END), "
+                f"SUM(CASE WHEN {self._plausible(c)} THEN {c} - p_{c} ELSE COALESCE(i_{flow}, 0) END), "
                 f"COUNT({c}), SUM(i_{flow})")
         with self.connect() as db:
             rows = db.execute(
-                f"""WITH s AS (
-                        SELECT *, LAG(ts) OVER w AS p_ts, {lags}
-                        FROM samples WHERE ts >= ? AND ts < ?
-                        WINDOW w AS (ORDER BY ts))
+                f"""WITH s AS ({self._counter_window(start, end)})
                     SELECT date(ts, 'unixepoch', 'localtime') AS d, COUNT(*), {', '.join(parts)}
                     FROM s WHERE ts >= ? GROUP BY d ORDER BY d""",
-                (start - self.MAX_GAP_SECONDS, end, start),
+                (start,),
             ).fetchall()
         result = []
         for row in rows:
@@ -300,8 +313,36 @@ class Store:
                     day[flow] = round(counted or 0.0, 1)
                 else:
                     day[flow] = round(integ or 0.0, 1)
+            check_balance(day)
             result.append(day)
         return result
+
+    def counter_glitches(self, limit=50):
+        """Unmögliche Zählersprünge für die Diagnose (--check-data)."""
+        found = []
+        with self.connect() as db:
+            for flow, c in FLOWS.items():
+                found += [(ts, c, prev, value) for ts, prev, value in db.execute(
+                    f"""WITH s AS ({self._counter_window(0, 2 ** 40)})
+                        SELECT ts, p_{c}, {c} FROM s
+                        WHERE p_{c} IS NOT NULL AND {c} IS NOT NULL
+                          AND ts - p_ts <= {self.MAX_GAP_SECONDS} AND NOT {self._plausible(c)}
+                        ORDER BY ts LIMIT ?""", (limit,))]
+        return sorted(found)[:limit]
+
+
+def check_balance(day):
+    """Plausibilität eines Tages: Verbrauch ≈ Erzeugung + Bezug + Entladung − Ladung − Einspeisung.
+
+    Weicht der Verbrauch deutlich davon ab (mehr als Wandler- und Speicherverluste
+    erklären), wird der Tag mit 'warning' markiert.
+    """
+    expected = ((day.get("production") or 0) + (day.get("grid_buy") or 0) + (day.get("ess_discharge") or 0)
+                - (day.get("ess_charge") or 0) - (day.get("grid_sell") or 0))
+    actual = day.get("consumption") or 0
+    if abs(actual - expected) > max(2000, 0.3 * max(actual, expected)):
+        day["warning"] = {"consumption": round(actual, 1), "expected": round(expected, 1)}
+    return day
 
 
 def add_ratios(entry):
@@ -535,6 +576,7 @@ def make_handler(app):
             total["cost"] = app.costs(days, calendar_days)
             self.send_json({"group": group, "from": first.isoformat(), "to": last.isoformat(),
                             "first_date": app.store.first_date(), "days_with_data": len(days),
+                            "warnings": [{"date": d["date"], **d["warning"]} for d in days if "warning" in d],
                             "rows": rows, "total": total, "cost": total["cost"]})
 
         def api_channels(self, q):
@@ -553,7 +595,7 @@ class App:
         if self.demo and db == DEFAULTS["database"]:
             db = "demo.sqlite"
         os.makedirs(DATA_DIR, exist_ok=True)
-        self.store = Store(data_path(db))
+        self.store = Store(data_path(db), float(cfg["max_power_w"]))
         if self.demo:
             self.client = DemoClient()
             if self.store.is_empty():
@@ -587,11 +629,38 @@ def check(cfg):
     return 0
 
 
+def check_data(cfg):
+    path = data_path(cfg["database"])
+    if not os.path.exists(path):
+        print(f"Keine Datenbank gefunden: {path}")
+        return 1
+    store = Store(path, float(cfg["max_power_w"]))
+    glitches = store.counter_glitches(200)
+    print(f"Datenbank: {path}")
+    if not glitches:
+        print("Keine unmöglichen Zählersprünge gefunden.")
+    for ts, channel, prev, value in glitches:
+        when = datetime.fromtimestamp(ts).strftime("%d.%m.%Y %H:%M")
+        print(f"  {when}  {channel:16} {prev:>14,.0f} -> {value:>14,.0f} Wh  ({value - prev:+,.0f} Wh)")
+    if glitches:
+        print(f"\n{len(glitches)} Sprünge – sie werden in den Auswertungen durch die gemessene Leistung ersetzt.")
+    first = store.first_date()
+    if first:
+        days = store.daily_energy(date.fromisoformat(first), date.today())
+        bad = [d for d in days if "warning" in d]
+        print(f"\nTagesbilanz geprüft: {len(days)} Tage, {len(bad)} auffällig.")
+        for d in bad:
+            w = d["warning"]
+            print(f"  {d['date']}: Verbrauch {w['consumption'] / 1000:,.1f} kWh, laut Bilanz {w['expected'] / 1000:,.1f} kWh")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Lokales FEMS-Dashboard")
     ap.add_argument("--config", default=os.path.join(DATA_DIR, "config.json"))
     ap.add_argument("--demo", action="store_true", help="simulierte Daten statt FEMS")
     ap.add_argument("--check", action="store_true", help="Verbindung testen und Kanäle auflisten")
+    ap.add_argument("--check-data", action="store_true", help="gespeicherte Werte auf Messfehler prüfen")
     ap.add_argument("--port", type=int)
     args = ap.parse_args()
 
@@ -602,6 +671,8 @@ def main():
         cfg["listen_port"] = args.port
     if args.check:
         return check(cfg)
+    if args.check_data:
+        return check_data(cfg)
 
     app = App(cfg)
     app.poller.start()

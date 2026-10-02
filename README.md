@@ -59,6 +59,7 @@ Ohne FEMS (zum Anschauen): `python3 server.py --demo` erzeugt 60 Tage simulierte
 | `base_price_month` | Grundpreis des Stromtarifs in €/Monat | `11.90` |
 | `price_per_kwh` | Arbeitspreis in €/kWh | `0.326` |
 | `feed_in_per_kwh` | Einspeisevergütung in €/kWh | `0.0666` |
+| `max_power_w` | größte mögliche Leistung; größere Zählersprünge gelten als Messfehler | `50000` |
 
 Alle Werte lassen sich auch über Umgebungsvariablen setzen, z. B. `FEMS_FEMS_URL=http://192.168.0.23`.
 Der Ordner für `config.json`, Datenbank und Exporte ist standardmäßig der Programmordner;
@@ -138,18 +139,31 @@ der Ersparnis. Alle Posten werden auf Cent gerundet und die Summen daraus gebild
 Anzeige immer aufgeht. Tarif und Vergütung stehen in `config.json` (`base_price_month`,
 `price_per_kwh`, `feed_in_per_kwh`).
 
-### Tagesenergie aus den Zählern
+### Tagesenergie aus den Zählern und Plausibilitätsprüfung
 
 Die Tageswerte entstehen aus den Zuwächsen der FEMS-Energiezähler zwischen zwei Messwerten.
-Springt ein Zähler zurück (z. B. nach einem Update des FEMS), wird dieser Sprung übersprungen.
-War der Server bis zu 6 Stunden aus, wird die Energie dieser Zeit dem ersten Messwert danach
-zugerechnet; längere Lücken bleiben leer.
+Jeder Zuwachs wird geprüft:
 
-- **Autarkie** = 1 − Netzbezug / Verbrauch
-- **Eigenverbrauch** = 1 − Einspeisung / Erzeugung
+- **Rücksprung** (Zähler zurückgesetzt, z. B. nach einem Update des FEMS) oder
+- **unmöglicher Sprung** – mehr Energie, als mit `max_power_w` (Standard 50 kW) in der Zeit
+  fließen kann, z. B. wenn das FEMS einmal den Wert 0 liefert und danach wieder den echten Stand
 
-Die Historie beginnt mit dem ersten Start des Servers. Damit sie lückenlos bleibt, sollte der
-Server dauerhaft laufen, z. B. auf einem Raspberry Pi oder NAS.
+In beiden Fällen zählt für dieses Intervall stattdessen die gemessene Leistung. Die Rohdaten bleiben
+unverändert in der Datenbank; die Korrektur greift bei jeder Auswertung, also auch rückwirkend für
+die gesamte Historie. War der Server bis zu 6 Stunden aus, wird die Energie dieser Zeit dem ersten
+Messwert danach zugerechnet; längere Lücken bleiben leer.
+
+Zusätzlich wird jeder Tag gegen die Energiebilanz geprüft:
+Verbrauch ≈ Erzeugung + Netzbezug + Batterie entladen − Batterie geladen − Einspeisung.
+Weicht der Verbrauch um mehr als 30 % (mindestens 2 kWh) ab, zeigt die Auswertung einen Hinweis.
+
+Gespeicherte Werte prüfen (listet unmögliche Zählersprünge und auffällige Tage auf):
+
+```bash
+python3 server.py --check-data                                   # Linux
+FeneconDashboard.exe --check-data                                # Windows
+docker exec fenecon-dashboard python server.py --check-data      # Docker/Portainer
+```
 
 ## Docker / Portainer
 

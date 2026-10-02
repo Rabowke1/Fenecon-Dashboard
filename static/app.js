@@ -229,6 +229,14 @@ function renderStats() {
   } else {
     notice.textContent = "";
   }
+  const warnings = energyData.warnings || [];
+  if (warnings.length) {
+    const list = warnings.slice(0, 3).map((w) =>
+      `${fmtDay(w.date, { day: "2-digit", month: "2-digit" })}: Verbrauch ${fmtEnergy(w.consumption)}, laut Bilanz ${fmtEnergy(w.expected)}`).join("; ");
+    notice.textContent = `${notice.textContent ? notice.textContent + " " : ""}Unplausible Werte – ${list}`
+      + `${warnings.length > 3 ? ` und ${warnings.length - 3} weitere Tage` : ""}. Details mit dem Aufruf „--check-data“ (siehe README).`;
+  }
+  notice.classList.toggle("warn", warnings.length > 0);
   notice.hidden = !notice.textContent;
 }
 

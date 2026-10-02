@@ -36,7 +36,8 @@ class EnergyTests(unittest.TestCase):
         d = date(2026, 6, 1)
         self.store.insert(self.rows(d))
         day = self.store.daily_energy(d, d)[0]
-        self.assertAlmostEqual(day["production"], 2950, delta=1)  # 59 Intervalle zwischen 60 Zählerständen
+        # 59 Zählerdifferenzen à 50 Wh + erste Minute aus der gemessenen Leistung = 1 h × 3 kW
+        self.assertAlmostEqual(day["production"], 3000, delta=1)
         self.assertEqual(day["grid_buy"], 0)
 
     def test_falls_back_to_integrated_power(self):
@@ -80,6 +81,37 @@ class EnergyTests(unittest.TestCase):
         self.store.insert(rows)
         day = self.store.daily_energy(date(2026, 6, 6), date(2026, 6, 6))[0]
         self.assertEqual(day["production"], 200)
+
+    def test_single_zero_reading_does_not_explode_the_day(self):
+        # Fall vom 30.09.: ein einzelner Messwert 0 im Verbrauchszähler -> 2,8 MWh
+        d = date(2026, 9, 30)
+        start = int(datetime(2026, 9, 30, 12).timestamp())
+        rows = self.counter_rows(start, [2_800_000, 2_800_030, 0, 2_800_060, 2_800_090])
+        for r in rows:
+            r["i_production"] = 30
+        self.store.insert(rows)
+        day = self.store.daily_energy(d, d)[0]
+        self.assertEqual(day["production"], 150)   # 5 Minuten à 30 Wh
+        glitches = self.store.counter_glitches()
+        self.assertEqual({(g[1], g[3]) for g in glitches if g[1] == "e_production"},
+                         {("e_production", 0), ("e_production", 2_800_060)})
+
+    def test_jump_faster_than_max_power_uses_measured_power(self):
+        store = server.Store(os.path.join(self.tmp.name, "p.sqlite"), max_power_w=10000)
+        start = int(datetime(2026, 6, 7, 12).timestamp())
+        rows = self.counter_rows(start, [0, 100, 50_000, 50_100])  # +49,9 kWh in 1 Minute: unmöglich
+        for r in rows:
+            r["i_production"] = 100
+        store.insert(rows)
+        self.assertEqual(store.daily_energy(date(2026, 6, 7), date(2026, 6, 7))[0]["production"], 400)
+
+    def test_balance_check_flags_implausible_day(self):
+        ok = server.check_balance({"production": 38200, "grid_buy": 1000, "ess_discharge": 12800,
+                                   "ess_charge": 15100, "grid_sell": 0, "consumption": 37000})
+        self.assertNotIn("warning", ok)
+        bad = server.check_balance({"production": 33500, "grid_buy": 2900, "ess_discharge": 16700,
+                                    "ess_charge": 10000, "grid_sell": 100, "consumption": 2_835_200})
+        self.assertEqual(bad["warning"]["expected"], 43000)
 
     def test_first_date(self):
         self.assertIsNone(self.store.first_date())
