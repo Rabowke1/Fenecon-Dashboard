@@ -155,7 +155,12 @@ Messwert danach zugerechnet; längere Lücken bleiben leer.
 
 Zusätzlich wird jeder Tag gegen die Energiebilanz geprüft:
 Verbrauch ≈ Erzeugung + Netzbezug + Batterie entladen − Batterie geladen − Einspeisung.
-Weicht der Verbrauch um mehr als 30 % (mindestens 2 kWh) ab, zeigt die Auswertung einen Hinweis.
+Weicht der Verbrauch um mehr als 30 % (mindestens 2 kWh) ab, gilt der Verbrauchszähler für diesen
+Tag als fehlerhaft: Der Verbrauch wird **automatisch durch den Wert aus der Bilanz ersetzt**. Die
+Auswertung weist darauf hin („Automatisch korrigiert – 20.09.: Verbrauchszähler 63,3 kWh → 15,3 kWh“),
+in der Tabelle ist der Tag mit `*` markiert, und Autarkie, Eigenverbrauch und Kosten rechnen mit dem
+korrigierten Wert. Ergibt die Bilanz selbst keinen sinnvollen Wert (negativ), bleibt der Zählerwert
+stehen und der Hinweis lautet „Unplausible Werte“.
 
 Gespeicherte Werte prüfen (listet unmögliche Zählersprünge und auffällige Tage auf):
 

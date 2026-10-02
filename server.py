@@ -341,13 +341,18 @@ def check_balance(day):
     """Plausibilität eines Tages: Verbrauch ≈ Erzeugung + Bezug + Entladung − Ladung − Einspeisung.
 
     Weicht der Verbrauch deutlich davon ab (mehr als Wandler- und Speicherverluste
-    erklären), wird der Tag mit 'warning' markiert.
+    erklären), gilt der Verbrauchszähler als fehlerhaft: Der Verbrauch wird durch den
+    Wert aus der Bilanz ersetzt und der Tag mit 'warning' markiert (corrected=True).
+    Ist die Bilanz selbst unbrauchbar (negativ), bleibt der Wert stehen (corrected=False).
     """
     expected = ((day.get("production") or 0) + (day.get("grid_buy") or 0) + (day.get("ess_discharge") or 0)
                 - (day.get("ess_charge") or 0) - (day.get("grid_sell") or 0))
     actual = day.get("consumption") or 0
     if abs(actual - expected) > max(2000, 0.3 * max(actual, expected)):
-        day["warning"] = {"consumption": round(actual, 1), "expected": round(expected, 1)}
+        corrected = expected > 0
+        day["warning"] = {"consumption": round(actual, 1), "expected": round(expected, 1), "corrected": corrected}
+        if corrected:
+            day["consumption"] = round(expected, 1)
     return day
 
 
@@ -657,7 +662,8 @@ def check_data(cfg):
         print(f"\nTagesbilanz geprüft: {len(days)} Tage, {len(bad)} auffällig.")
         for d in bad:
             w = d["warning"]
-            print(f"  {d['date']}: Verbrauch {w['consumption'] / 1000:,.1f} kWh, laut Bilanz {w['expected'] / 1000:,.1f} kWh")
+            how = "korrigiert auf den Bilanzwert" if w["corrected"] else "nicht korrigierbar (Bilanz negativ)"
+            print(f"  {d['date']}: Zähler {w['consumption'] / 1000:,.1f} kWh, laut Bilanz {w['expected'] / 1000:,.1f} kWh – {how}")
     return 0
 
 
