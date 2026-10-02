@@ -1,0 +1,28 @@
+# Vorlage für systemd. linux/install.sh setzt Benutzer und Pfade ein und installiert den Dienst.
+# Von Hand: @USER@ und @DIR@ ersetzen, nach /etc/systemd/system/ kopieren,
+# dann "sudo systemctl daemon-reload && sudo systemctl enable --now fenecon-dashboard".
+
+[Unit]
+Description=Fenecon-Dashboard (FEMS-Auswertung)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DIR@
+ExecStart=@PYTHON@ @DIR@/server.py
+Environment=PYTHONUNBUFFERED=1
+# Bei Absturz nach 10 s neu starten
+Restart=always
+RestartSec=10
+# Beim Stoppen speichert der Server die angefangene Minute (SIGTERM)
+TimeoutStopSec=20
+
+# Absicherung: nur der Programmordner ist beschreibbar
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
